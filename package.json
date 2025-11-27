@@ -2,7 +2,7 @@
   "name": "sf-metadata-tracker",
   "displayName": "SF Metadata Tracker",
   "description": "Track and display sync status indicators for Salesforce metadata files in VS Code",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "avidev9",
   "type": "module",
   "scripts": {
