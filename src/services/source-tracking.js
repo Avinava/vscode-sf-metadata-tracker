@@ -109,38 +109,103 @@ export function clearOrgCache() {
 }
 
 /**
- * Get source tracking status for the project
- * @returns {Promise<{status: string, local: Array, remote: Array, conflicts: Array, error?: string}>}
+ * Batch fetch metadata info for multiple files of the same type
+ * @param {string} metadataType - The Salesforce metadata type (e.g., 'ApexClass')
+ * @param {Array<{filePath: string, name: string}>} files - Array of files to query
+ * @returns {Promise<Map<string, Object>>} Map of filePath to status data
  */
-export async function getSourceTrackingStatus() {
+export async function batchGetFileOrgStatus(metadataType, files) {
+  const results = new Map();
+  
+  if (!files || files.length === 0) {
+    return results;
+  }
+
   const orgStatus = await checkOrgConnection();
   if (!orgStatus.connected) {
-    return { status: 'disconnected', local: [], remote: [], conflicts: [], error: orgStatus.error };
+    files.forEach(f => results.set(f.filePath, { inSync: null, error: 'Not connected to org' }));
+    return results;
+  }
+
+  // Check cache first and filter out cached files
+  const cacheTTL = getCacheTTL();
+  const uncachedFiles = [];
+  
+  for (const file of files) {
+    const cached = sourceStatusCache.get(file.filePath);
+    if (cached && Date.now() - cached.timestamp < cacheTTL) {
+      results.set(file.filePath, cached.data);
+    } else {
+      uncachedFiles.push(file);
+    }
+  }
+
+  if (uncachedFiles.length === 0) {
+    return results;
   }
 
   try {
+    // Build batch query with IN clause
+    const names = uncachedFiles.map(f => `'${f.name}'`).join(',');
+    const query = buildBatchMetadataQuery(metadataType, names);
+    
+    if (!query) {
+      uncachedFiles.forEach(f => results.set(f.filePath, { inSync: null, error: 'Cannot query this metadata type' }));
+      return results;
+    }
+
     const result = await shell.execCommandWithTimeout(
-      'sf project retrieve preview --json',
+      `sf data query --query "${query}" --json`,
       30000
     );
     const data = JSON.parse(result);
 
-    if (data.status === 0) {
-      const remote = data.result?.toRetrieve || [];
-      const conflicts = data.result?.conflicts || [];
-
-      return {
-        status: remote.length > 0 || conflicts.length > 0 ? 'changes' : 'synced',
-        local: [],
-        remote,
-        conflicts,
-      };
+    // Create a map of name -> record for quick lookup
+    const recordMap = new Map();
+    if (data.status === 0 && data.result?.records) {
+      for (const record of data.result.records) {
+        const recordName = record.Name || record.DeveloperName;
+        recordMap.set(recordName, record);
+      }
     }
 
-    return { status: 'unknown', local: [], remote: [], conflicts: [] };
+    // Process each file
+    for (const file of uncachedFiles) {
+      const record = recordMap.get(file.name);
+      
+      if (record) {
+        const statusData = {
+          inSync: null,
+          lastModifiedBy: record.LastModifiedBy?.Name || record.LastModifiedById,
+          lastModifiedDate: record.LastModifiedDate,
+          createdBy: record.CreatedBy?.Name || record.CreatedById,
+          createdDate: record.CreatedDate,
+          type: metadataType,
+          name: file.name,
+        };
+
+        // Cache the result
+        sourceStatusCache.set(file.filePath, {
+          timestamp: Date.now(),
+          data: statusData,
+        });
+
+        results.set(file.filePath, statusData);
+      } else {
+        const notFoundData = { inSync: null, error: 'Component not found in org' };
+        sourceStatusCache.set(file.filePath, {
+          timestamp: Date.now(),
+          data: notFoundData,
+        });
+        results.set(file.filePath, notFoundData);
+      }
+    }
+
+    return results;
   } catch (error) {
-    logger.log(`Source tracking check failed: ${error.message}`, 'WARN');
-    return { status: 'error', local: [], remote: [], conflicts: [], error: error.message };
+    logger.log(`Batch status check failed: ${error.message}`, 'WARN');
+    uncachedFiles.forEach(f => results.set(f.filePath, { inSync: null, error: error.message }));
+    return results;
   }
 }
 
@@ -215,7 +280,7 @@ export async function getFileOrgStatus(filePath) {
  * @param {string} filePath 
  * @returns {{type: string, name: string, apiName: string} | null}
  */
-function getMetadataTypeFromPath(filePath) {
+export function getMetadataTypeFromPath(filePath) {
   const fileName = path.basename(filePath);
   const dirName = path.dirname(filePath);
   const parts = dirName.split(path.sep);
@@ -307,6 +372,40 @@ function buildMetadataQuery(metadataInfo) {
 }
 
 /**
+ * Build batch SOQL query for multiple metadata items of the same type
+ * @param {string} type - Metadata type
+ * @param {string} namesInClause - Comma-separated quoted names for IN clause
+ * @returns {string | null}
+ */
+function buildBatchMetadataQuery(type, namesInClause) {
+  switch (type) {
+    case 'ApexClass':
+      return `SELECT Id, Name, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM ApexClass WHERE Name IN (${namesInClause})`;
+
+    case 'ApexTrigger':
+      return `SELECT Id, Name, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM ApexTrigger WHERE Name IN (${namesInClause})`;
+
+    case 'ApexPage':
+      return `SELECT Id, Name, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM ApexPage WHERE Name IN (${namesInClause})`;
+
+    case 'ApexComponent':
+      return `SELECT Id, Name, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM ApexComponent WHERE Name IN (${namesInClause})`;
+
+    case 'LightningComponentBundle':
+      return `SELECT Id, DeveloperName, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM LightningComponentBundle WHERE DeveloperName IN (${namesInClause})`;
+
+    case 'AuraDefinitionBundle':
+      return `SELECT Id, DeveloperName, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM AuraDefinitionBundle WHERE DeveloperName IN (${namesInClause})`;
+
+    case 'Flow':
+      return `SELECT Id, DeveloperName, LastModifiedBy.Name, LastModifiedDate, CreatedBy.Name, CreatedDate FROM FlowDefinition WHERE DeveloperName IN (${namesInClause})`;
+
+    default:
+      return null;
+  }
+}
+
+/**
  * Format the last modified date for display
  * @param {string} dateString 
  * @returns {string}
@@ -329,39 +428,6 @@ export function formatDate(dateString) {
     return `${diffDays} days ago`;
   } else {
     return date.toLocaleDateString();
-  }
-}
-
-/**
- * Check if there are remote changes for the current project
- * @returns {Promise<{hasChanges: boolean, count: number, changes: Array}>}
- */
-export async function checkRemoteChanges() {
-  const orgStatus = await checkOrgConnection();
-  if (!orgStatus.connected) {
-    return { hasChanges: false, count: 0, changes: [], error: 'Not connected' };
-  }
-
-  try {
-    const result = await shell.execCommandWithTimeout(
-      'sf project retrieve preview --json',
-      30000
-    );
-    const data = JSON.parse(result);
-
-    if (data.status === 0) {
-      const changes = data.result?.toRetrieve || [];
-      return {
-        hasChanges: changes.length > 0,
-        count: changes.length,
-        changes: changes.slice(0, 10), // Limit to first 10 for display
-      };
-    }
-
-    return { hasChanges: false, count: 0, changes: [] };
-  } catch (error) {
-    logger.log(`Remote changes check failed: ${error.message}`, 'WARN');
-    return { hasChanges: false, count: 0, changes: [], error: error.message };
   }
 }
 

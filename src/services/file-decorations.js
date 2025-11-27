@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as sourceTracking from './source-tracking.js';
+import * as statusBar from './status-bar.js';
 import * as logger from '../lib/logger.js';
 import { SALESFORCE_PATHS, SALESFORCE_EXTENSIONS } from '../lib/constants.js';
 
@@ -49,8 +50,11 @@ class SalesforceFileDecorationProvider {
       return undefined;
     }
 
-    // Check cache first
-    const cached = this._decorationCache.get(filePath);
+    // For meta.xml files, use the parent file path for both cache and query
+    const parentFilePath = this._getParentFilePath(filePath);
+
+    // Check cache using parent file path (so .cls and .cls-meta.xml share same cache)
+    const cached = this._decorationCache.get(parentFilePath);
     if (cached && Date.now() - cached.timestamp < 60000) {
       return cached.decoration;
     }
@@ -61,12 +65,9 @@ class SalesforceFileDecorationProvider {
       // Don't show decoration if not connected
       return undefined;
     }
-
-    // For meta.xml files, get the status of the parent file
-    const queryFilePath = this._getParentFilePath(filePath);
     
     // Get file status (this uses its own cache)
-    const fileStatus = await sourceTracking.getFileOrgStatus(queryFilePath);
+    const fileStatus = await sourceTracking.getFileOrgStatus(parentFilePath);
 
     let decoration;
 
@@ -105,9 +106,9 @@ class SalesforceFileDecorationProvider {
       }
     }
 
-    // Cache the decoration
+    // Cache the decoration using parent file path
     if (decoration) {
-      this._decorationCache.set(filePath, {
+      this._decorationCache.set(parentFilePath, {
         timestamp: Date.now(),
         decoration,
       });
@@ -117,25 +118,13 @@ class SalesforceFileDecorationProvider {
   }
 
   /**
-   * Check if file is a meta.xml file
-   * @param {string} filePath 
-   * @returns {boolean}
-   */
-  _isMetaFile(filePath) {
-    return filePath.endsWith('-meta.xml');
-  }
-
-  /**
    * Get the parent file path for a meta.xml file
    * @param {string} filePath 
    * @returns {string}
    */
   _getParentFilePath(filePath) {
     // If it's a meta file like "MyClass.cls-meta.xml", return "MyClass.cls"
-    if (this._isMetaFile(filePath)) {
-      return filePath.replace('-meta.xml', '');
-    }
-    return filePath;
+    return filePath.endsWith('-meta.xml') ? filePath.replace('-meta.xml', '') : filePath;
   }
 
   /**
@@ -191,23 +180,6 @@ class SalesforceFileDecorationProvider {
   }
 
   /**
-   * Clear cache for a file
-   * @param {string} filePath 
-   */
-  invalidateCache(filePath) {
-    this._decorationCache.delete(filePath);
-  }
-
-  /**
-   * Check if a file is a Salesforce file (public accessor)
-   * @param {string} filePath 
-   * @returns {boolean}
-   */
-  isSalesforceFile(filePath) {
-    return this._isSalesforceFile(filePath);
-  }
-
-  /**
    * Dispose the provider
    */
   dispose() {
@@ -222,6 +194,102 @@ class SalesforceFileDecorationProvider {
 // Singleton instance
 let decorationProvider = null;
 let disposables = [];
+
+/**
+ * Pre-fetch all Salesforce files in the workspace and warm up the cache
+ * This runs in the background to populate decorations for all files
+ * Uses batch queries to fetch multiple files of the same type in a single API call
+ */
+async function prefetchAllSalesforceFiles() {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders) return;
+
+  logger.log('Starting prefetch of Salesforce file statuses...');
+
+  // Find all Salesforce files
+  const patterns = [
+    '**/classes/*.cls',
+    '**/triggers/*.trigger',
+    '**/lwc/**/*.js',
+    '**/aura/**/*.js',
+    '**/pages/*.page',
+    '**/components/*.component',
+  ];
+
+  const allFiles = [];
+  for (const pattern of patterns) {
+    const files = await vscode.workspace.findFiles(pattern, '**/node_modules/**', 500);
+    allFiles.push(...files);
+  }
+
+  logger.log(`Found ${allFiles.length} Salesforce files to prefetch`);
+
+  if (allFiles.length === 0) {
+    return;
+  }
+
+  // Show initial progress
+  statusBar.showPrefetchProgress(0, allFiles.length);
+
+  // Group files by metadata type for batch queries
+  const filesByType = new Map();
+  
+  for (const uri of allFiles) {
+    const metadataInfo = sourceTracking.getMetadataTypeFromPath(uri.fsPath);
+    if (metadataInfo) {
+      if (!filesByType.has(metadataInfo.type)) {
+        filesByType.set(metadataInfo.type, []);
+      }
+      filesByType.get(metadataInfo.type).push({
+        uri,
+        filePath: uri.fsPath,
+        name: metadataInfo.name,
+      });
+    }
+  }
+
+  let processedCount = 0;
+  const batchSize = 50; // Query up to 50 items of the same type at once
+
+  // Process each metadata type
+  for (const [metadataType, files] of filesByType) {
+    // Process in batches within each type
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      
+      try {
+        // Use batch query to fetch all files of this type at once
+        await sourceTracking.batchGetFileOrgStatus(metadataType, batch);
+      } catch (error) {
+        logger.log(`Batch query failed for ${metadataType}: ${error.message}`, 'WARN');
+      }
+
+      // Update progress
+      processedCount += batch.length;
+      statusBar.showPrefetchProgress(processedCount, allFiles.length);
+
+      // Fire decoration change events for the batch (both main file and meta file)
+      batch.forEach(({ uri }) => {
+        if (decorationProvider) {
+          // Fire for the main file
+          decorationProvider._onDidChangeFileDecorations.fire(uri);
+          // Fire for the meta file too (e.g., .cls-meta.xml)
+          const metaUri = vscode.Uri.file(uri.fsPath + '-meta.xml');
+          decorationProvider._onDidChangeFileDecorations.fire(metaUri);
+        }
+      });
+
+      // Small delay between batches to avoid overwhelming the org
+      if (i + batchSize < files.length) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+
+  // Hide progress and show completion
+  statusBar.hidePrefetchProgress(allFiles.length);
+  logger.log('Prefetch complete');
+}
 
 /**
  * Initialize the file decoration provider
@@ -260,14 +328,14 @@ export function initialize(context) {
 
   logger.log('File decoration provider initialized');
 
-  return decorationProvider;
-}
+  // Start background prefetch after a short delay
+  // This allows VS Code to finish loading before we start querying
+  setTimeout(() => {
+    prefetchAllSalesforceFiles().catch((error) => {
+      logger.log(`Prefetch error: ${error.message}`, 'WARN');
+    });
+  }, 3000);
 
-/**
- * Get the decoration provider instance
- * @returns {SalesforceFileDecorationProvider | null}
- */
-export function getProvider() {
   return decorationProvider;
 }
 

@@ -6,13 +6,6 @@ export const EXTENSION_NAME = 'SF Metadata Tracker';
 export const EXTENSION_ID = 'sf-metadata-tracker';
 
 /**
- * Global state keys used by the extension
- */
-export const STATE_KEYS = {
-  WORKSPACE_INITIALIZED: `${EXTENSION_ID}.workspace-initialized`,
-};
-
-/**
  * Salesforce file paths that indicate metadata
  */
 export const SALESFORCE_PATHS = [

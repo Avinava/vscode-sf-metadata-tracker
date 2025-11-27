@@ -4,7 +4,9 @@ import { EXTENDED_SALESFORCE_PATHS } from '../lib/constants.js';
 
 // Status bar icons using codicons
 const SYNC_ICON = '$(sync)';
+const SYNC_SPIN_ICON = '$(sync~spin)';
 const WARNING_ICON = '$(warning)';
+const CLOUD_ICON = '$(cloud)';
 
 /**
  * Status bar service
@@ -12,7 +14,9 @@ const WARNING_ICON = '$(warning)';
  */
 
 let syncStatusBarItem = null;
+let prefetchStatusBarItem = null;
 let activeFileWatcher = null;
+let isPrefetching = false;
 
 /**
  * Initialize the status bar item
@@ -28,6 +32,14 @@ export function initialize(context) {
   syncStatusBarItem.command = 'sf-metadata-tracker.showFileOrgStatus';
   syncStatusBarItem.name = 'SF Metadata Tracker';
   context.subscriptions.push(syncStatusBarItem);
+
+  // Prefetch status bar item (shows background loading progress)
+  prefetchStatusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    99
+  );
+  prefetchStatusBarItem.name = 'SF Metadata Tracker - Loading';
+  context.subscriptions.push(prefetchStatusBarItem);
 
   // Watch for active editor changes to update sync status
   activeFileWatcher = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
@@ -263,12 +275,63 @@ export function getSyncStatusBarItem() {
 }
 
 /**
+ * Show prefetch progress in status bar
+ * @param {number} current - Current file index
+ * @param {number} total - Total number of files
+ */
+export function showPrefetchProgress(current, total) {
+  if (!prefetchStatusBarItem) return;
+  
+  isPrefetching = true;
+  const percentage = Math.round((current / total) * 100);
+  prefetchStatusBarItem.text = `${SYNC_SPIN_ICON} Syncing ${current}/${total} (${percentage}%)`;
+  prefetchStatusBarItem.tooltip = `SF Metadata Tracker: Loading file statuses from org...\n${current} of ${total} files processed`;
+  prefetchStatusBarItem.backgroundColor = undefined;
+  prefetchStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  prefetchStatusBarItem.show();
+}
+
+/**
+ * Hide prefetch progress
+ * @param {number} total - Total files processed
+ */
+export function hidePrefetchProgress(total) {
+  if (!prefetchStatusBarItem) return;
+  
+  isPrefetching = false;
+  
+  // Show completion message briefly
+  prefetchStatusBarItem.text = `${CLOUD_ICON} ${total} files synced`;
+  prefetchStatusBarItem.tooltip = `SF Metadata Tracker: All file statuses loaded`;
+  prefetchStatusBarItem.color = new vscode.ThemeColor('charts.green');
+  
+  // Hide after 3 seconds
+  setTimeout(() => {
+    if (prefetchStatusBarItem && !isPrefetching) {
+      prefetchStatusBarItem.hide();
+    }
+  }, 3000);
+}
+
+/**
+ * Check if prefetch is in progress
+ * @returns {boolean}
+ */
+export function isPrefetchInProgress() {
+  return isPrefetching;
+}
+
+/**
  * Dispose status bar resources
  */
 export function dispose() {
   if (syncStatusBarItem) {
     syncStatusBarItem.dispose();
     syncStatusBarItem = null;
+  }
+  if (prefetchStatusBarItem) {
+    prefetchStatusBarItem.dispose();
+    prefetchStatusBarItem = null;
   }
   if (activeFileWatcher) {
     activeFileWatcher.dispose();
