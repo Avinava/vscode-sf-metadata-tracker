@@ -1,0 +1,13 @@
+.vscode/**
+.vscode-test/**
+node_modules/**
+release/**
+.git/**
+.gitignore
+.eslintrc*
+eslint.config.js
+*.map
+*.vsix
+**/*.test.js
+**/test/**
+assets/icon-full.png
