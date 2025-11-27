@@ -5,7 +5,9 @@
 
 Track and display sync status indicators for Salesforce metadata files in VS Code. Get real-time visibility into your metadata's org status, including who last modified it and when.
 
-![SF Metadata Tracker](assets/icon.png)
+<p align="center">
+  <img src="assets/icon.png" alt="SF Metadata Tracker" width="128" height="128">
+</p>
 
 ## Features
 
