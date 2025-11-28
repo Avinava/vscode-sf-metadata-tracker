@@ -827,7 +827,7 @@ export async function runAllLocalTests() {
     
     try {
       // First, submit the test run asynchronously
-      progress.report({ message: '$(sync~spin) Submitting test run to org...' });
+      progress.report({ message: 'Submitting test run to org...' });
       outputChannel.appendLine('📤 Submitting async test run...');
       
       const submitResult = await shell.execCommandWithTimeout(
@@ -855,7 +855,7 @@ export async function runAllLocalTests() {
       const startTime = Date.now();
       
       // Show initial waiting state
-      progress.report({ message: '$(sync~spin) Waiting for tests to start...' });
+      progress.report({ message: 'Waiting for tests to start...' });
       
       while (!completed && pollCount < maxPolls) {
         // Check for cancellation
@@ -891,19 +891,18 @@ export async function runAllLocalTests() {
             const elapsed = Math.round((Date.now() - startTime) / 1000);
             const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
             
-            // Update progress bar with spinning icon and detailed status
+            // Update progress bar with detailed status
             if (total > 0) {
-              const statusIcon = status === 'Completed' ? '$(check)' : status === 'Failed' ? '$(error)' : '$(sync~spin)';
-              const errorText = errors > 0 ? ` | $(error) ${errors} failed` : '';
+              const errorText = errors > 0 ? ` | ${errors} failed` : '';
               progress.report({ 
-                message: `${statusIcon} ${processed}/${total} tests (${percentage}%) | ${elapsedStr}${errorText}`,
+                message: `${processed}/${total} tests (${percentage}%) | ${elapsedStr}${errorText}`,
                 increment: percentage - lastProgress
               });
               lastProgress = percentage;
             } else {
               // Tests haven't started processing yet
               progress.report({ 
-                message: `$(sync~spin) Queued... waiting to start | ${elapsedStr}`
+                message: `Queued... waiting to start | ${elapsedStr}`
               });
             }
             
@@ -934,7 +933,7 @@ export async function runAllLocalTests() {
       }
       
       // Fetch final results with coverage
-      progress.report({ message: '$(sync~spin) Fetching results with coverage data...' });
+      progress.report({ message: 'Fetching results with coverage data...' });
       outputChannel.appendLine('');
       outputChannel.appendLine('📥 Fetching detailed results...');
       
