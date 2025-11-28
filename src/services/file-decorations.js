@@ -194,8 +194,8 @@ let disposables = [];
 
 /**
  * Pre-fetch all Salesforce files in the workspace and warm up the cache
- * This runs in the background to populate decorations for all files
- * Uses batch queries to fetch multiple files of the same type in a single API call
+ * Uses a pipelined approach: metadata query + content comparison run in parallel
+ * As soon as a batch's metadata is fetched, its content comparison starts immediately
  */
 async function prefetchAllSalesforceFiles() {
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -230,7 +230,6 @@ async function prefetchAllSalesforceFiles() {
 
   // Group files by metadata type for batch queries, deduplicating by name+type
   const filesByType = new Map();
-  const allFilesForComparison = [];
   const seenFiles = new Set(); // Track unique name+type combinations
   
   for (const uri of allFiles) {
@@ -253,111 +252,119 @@ async function prefetchAllSalesforceFiles() {
         type: metadataInfo.type,
       };
       filesByType.get(metadataInfo.type).push(fileInfo);
-      allFilesForComparison.push(fileInfo);
     }
   }
 
-  let processedCount = 0;
-  const batchSize = 50; // Query up to 50 items of the same type at once
+  // Decoration callback to stream updates as each file is compared
+  const onFileCompared = (uri, _hasDifference, _isOrgNewer) => {
+    if (decorationProvider) {
+      // Clear cache for this file and fire decoration change
+      decorationProvider._decorationCache.delete(uri.fsPath);
+      decorationProvider._onDidChangeFileDecorations.fire(uri);
+      // Also update meta file
+      const metaUri = vscode.Uri.file(uri.fsPath + '-meta.xml');
+      decorationProvider._decorationCache.delete(metaUri.fsPath);
+      decorationProvider._onDidChangeFileDecorations.fire(metaUri);
+    }
+  };
 
-  // Phase 1: Fetch metadata info (who modified, when) using batch SOQL
+  // Track comparison promises to await at the end
+  const comparisonPromises = [];
+  let processedMetadataCount = 0;
+  let processedCompareCount = 0;
+  const totalUniqueFiles = seenFiles.size;
+  const metadataBatchSize = 50; // Query up to 50 items of the same type at once
+  const compareBatchSize = 10; // Compare 10 files at a time
+
+  // Update combined progress (metadata fetch + comparison)
+  const updateProgress = () => {
+    // Weight: metadata = 30%, comparison = 70%
+    const metadataProgress = (processedMetadataCount / totalUniqueFiles) * 0.3;
+    const compareProgress = (processedCompareCount / totalUniqueFiles) * 0.7;
+    const totalProgress = Math.floor((metadataProgress + compareProgress) * totalUniqueFiles);
+    statusBar.showPrefetchProgress(totalProgress, totalUniqueFiles);
+  };
+
+  // Pipeline: As each metadata batch completes, immediately start comparison
   for (const [metadataType, files] of filesByType) {
     // Process in batches within each type
-    for (let i = 0; i < files.length; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
+    for (let i = 0; i < files.length; i += metadataBatchSize) {
+      const metadataBatch = files.slice(i, i + metadataBatchSize);
       
       try {
-        // Use batch query to fetch all files of this type at once
-        await sourceTracking.batchGetFileOrgStatus(metadataType, batch);
+        // Fetch metadata info (timestamps, who modified)
+        await sourceTracking.batchGetFileOrgStatus(metadataType, metadataBatch);
+        
+        // Update metadata progress
+        processedMetadataCount += metadataBatch.length;
+        updateProgress();
+        
+        // Immediately start content comparison for this batch (don't await)
+        // This runs in parallel with the next metadata fetch
+        const comparePromise = (async () => {
+          // Split into smaller comparison batches
+          for (let j = 0; j < metadataBatch.length; j += compareBatchSize) {
+            const compareBatch = metadataBatch.slice(j, j + compareBatchSize);
+            try {
+              await sourceTracking.batchCompareFilesWithOrg(compareBatch, null, onFileCompared);
+            } catch (error) {
+              logger.log(`Batch compare failed: ${error.message}`, 'WARN');
+            }
+            processedCompareCount += compareBatch.length;
+            updateProgress();
+          }
+        })();
+        
+        comparisonPromises.push(comparePromise);
+        
       } catch (error) {
         logger.log(`Batch query failed for ${metadataType}: ${error.message}`, 'WARN');
+        processedMetadataCount += metadataBatch.length;
+        updateProgress();
       }
 
-      // Update progress
-      processedCount += batch.length;
-      statusBar.showPrefetchProgress(processedCount, allFiles.length);
-
-      // Don't fire decoration events during prefetch - wait for content comparison
-      // This prevents premature checkmarks from appearing
-
-      // Small delay between batches to avoid overwhelming the org
-      if (i + batchSize < files.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      // Small delay between metadata batches to avoid overwhelming the org
+      if (i + metadataBatchSize < files.length) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
   }
 
-  // Hide progress and show completion
-  statusBar.hidePrefetchProgress(allFiles.length);
-  logger.log('Prefetch complete');
+  // Wait for all comparison batches to complete
+  logger.log(`Waiting for ${comparisonPromises.length} comparison batches to complete...`);
+  await Promise.all(comparisonPromises);
 
-  // Phase 2: Background content comparison (runs after initial prefetch)
-  // This compares actual file contents with org versions
-  setTimeout(async () => {
-    logger.log('Starting background content comparison...');
-    
-    try {
-      // Decoration callback to stream updates as each file is compared
-      const onFileCompared = (uri, hasDifference, isOrgNewer) => {
-        if (decorationProvider) {
-          // Clear cache for this file and fire decoration change
-          decorationProvider._decorationCache.delete(uri.fsPath);
-          decorationProvider._onDidChangeFileDecorations.fire(uri);
-          // Also update meta file
-          const metaUri = vscode.Uri.file(uri.fsPath + '-meta.xml');
-          decorationProvider._decorationCache.delete(metaUri.fsPath);
-          decorationProvider._onDidChangeFileDecorations.fire(metaUri);
-        }
-      };
-      
-      await sourceTracking.batchCompareFilesWithOrg(allFilesForComparison, (current, total) => {
-        statusBar.showCompareProgress(current, total);
-      }, onFileCompared);
-      
-      logger.log('Content comparison complete, refreshing decorations...');
-      
-      // Log diff cache state for debugging
-      const diffCache = sourceTracking.getDiffCache();
-      logger.log(`Diff cache has ${diffCache.size} entries`);
-      
-      // Show completion message
-      const changedCount = Array.from(diffCache.values()).filter(v => v.hasDifference).length;
-      if (changedCount > 0) {
-        logger.log(`Found ${changedCount} files with local changes`);
-        // Log which files have changes
-        for (const [filePath, data] of diffCache.entries()) {
-          if (data.hasDifference) {
-            logger.log(`  - ${filePath.split('/').pop()}`);
-          }
-        }
-      } else {
-        logger.log('All files are in sync with org');
-      }
-      
-      // Refresh decorations to show difference indicators
-      if (decorationProvider) {
-        decorationProvider._decorationCache.clear();
-        decorationProvider._onDidChangeFileDecorations.fire(undefined);
-      }
-      
-      // Update status bar for current file - use existing status bar module
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        await statusBar.updateSyncStatus(editor.document.uri.fsPath);
-      }
-      
-      // Hide progress after comparison complete
-      statusBar.hidePrefetchProgress(allFilesForComparison.length);
-    } catch (error) {
-      logger.log(`Content comparison failed: ${error.message}`, 'WARN');
-      statusBar.hidePrefetchProgress(0);
-      // Still update status bar even on error
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        await statusBar.updateSyncStatus(editor.document.uri.fsPath);
+  // Log completion stats
+  const diffCache = sourceTracking.getDiffCache();
+  logger.log(`Content comparison complete. Diff cache has ${diffCache.size} entries`);
+  
+  const changedCount = Array.from(diffCache.values()).filter(v => v.hasDifference).length;
+  if (changedCount > 0) {
+    logger.log(`Found ${changedCount} files with differences`);
+    for (const [filePath, data] of diffCache.entries()) {
+      if (data.hasDifference) {
+        logger.log(`  - ${filePath.split('/').pop()}`);
       }
     }
-  }, 2000);
+  } else {
+    logger.log('All files are in sync with org');
+  }
+
+  // Final decoration refresh
+  if (decorationProvider) {
+    decorationProvider._decorationCache.clear();
+    decorationProvider._onDidChangeFileDecorations.fire(undefined);
+  }
+
+  // Update status bar for current file
+  const editor = vscode.window.activeTextEditor;
+  if (editor) {
+    await statusBar.updateSyncStatus(editor.document.uri.fsPath);
+  }
+
+  // Hide progress
+  statusBar.hidePrefetchProgress(totalUniqueFiles);
+  logger.log('Prefetch complete');
 }
 
 /**
