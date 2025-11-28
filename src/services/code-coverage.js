@@ -627,7 +627,8 @@ async function runTestClass(testClassName) {
 function displayTestResults(outputChannel, testResult, testClassName) {
   const summary = testResult.result?.summary || testResult.summary || {};
   const tests = testResult.result?.tests || testResult.tests || [];
-  const coverage = testResult.result?.coverage?.coverage || testResult.coverage?.coverage || [];
+  const coverageRecords = testResult.result?.coverage?.records || testResult.coverage?.records || [];
+  const coverageSummary = testResult.result?.coverage?.summary || testResult.coverage?.summary || {};
   
   // Summary section
   outputChannel.appendLine('📊 TEST SUMMARY');
@@ -673,36 +674,61 @@ function displayTestResults(outputChannel, testResult, testClassName) {
     outputChannel.appendLine('');
   }
 
-  // Coverage section
-  if (coverage.length > 0) {
+  // Coverage section - aggregate by class/trigger name
+  if (coverageRecords.length > 0) {
     outputChannel.appendLine('🧪 CODE COVERAGE');
     outputChannel.appendLine('────────────────────────────────────────────────────────────────');
     
-    // Sort by coverage percentage (ascending, so lowest coverage is first)
-    const sortedCoverage = [...coverage].sort((a, b) => {
-      const aPercent = parseFloat(a.coveredPercent || a.percentage || 0);
-      const bPercent = parseFloat(b.coveredPercent || b.percentage || 0);
-      return aPercent - bPercent;
+    // Aggregate coverage by class/trigger (multiple records per class from different test methods)
+    const coverageByClass = new Map();
+    coverageRecords.forEach(record => {
+      const name = record.ApexClassOrTrigger?.Name || 'Unknown';
+      const covered = record.NumLinesCovered || 0;
+      const uncovered = record.NumLinesUncovered || 0;
+      
+      if (!coverageByClass.has(name)) {
+        coverageByClass.set(name, { covered: 0, uncovered: 0, total: 0 });
+      }
+      
+      // Use the max covered lines seen (coverage accumulates across test methods)
+      const existing = coverageByClass.get(name);
+      if (covered > existing.covered) {
+        existing.covered = covered;
+      }
+      if (uncovered > existing.uncovered || existing.uncovered === 0) {
+        existing.uncovered = uncovered;
+      }
     });
     
-    sortedCoverage.forEach(cov => {
-      const name = cov.name || cov.apexClassOrTriggerName || 'Unknown';
-      const percent = parseFloat(cov.coveredPercent || cov.percentage || 0);
-      const covered = cov.numLinesCovered || 0;
-      const uncovered = cov.numLinesUncovered || 0;
-      
+    // Convert to array and calculate percentages
+    const aggregatedCoverage = Array.from(coverageByClass.entries()).map(([name, data]) => {
+      const total = data.covered + data.uncovered;
+      const percent = total > 0 ? Math.round((data.covered / total) * 100) : 0;
+      return { name, covered: data.covered, uncovered: data.uncovered, total, percent };
+    });
+    
+    // Sort by coverage percentage (ascending, so lowest coverage is first)
+    aggregatedCoverage.sort((a, b) => a.percent - b.percent);
+    
+    aggregatedCoverage.forEach(cov => {
       let icon = '🔴';
-      if (percent >= 75) icon = '🟢';
-      else if (percent >= 50) icon = '🟡';
+      if (cov.percent >= 75) icon = '🟢';
+      else if (cov.percent >= 50) icon = '🟡';
       
-      outputChannel.appendLine(`  ${icon} ${name}: ${percent}% (${covered}/${covered + uncovered} lines)`);
+      outputChannel.appendLine(`  ${icon} ${cov.name}: ${cov.percent}% (${cov.covered}/${cov.total} lines)`);
     });
     outputChannel.appendLine('');
     
-    // Overall coverage
-    const orgCoverage = summary.testRunCoverage || summary.orgWideCoverage;
+    // Overall coverage from summary
+    const orgCoverage = coverageSummary.orgWideCoverage || summary.orgWideCoverage;
+    const testCoverage = coverageSummary.testRunCoverage || summary.testRunCoverage;
+    if (testCoverage) {
+      outputChannel.appendLine(`  📊 Test Run Coverage: ${testCoverage}`);
+    }
     if (orgCoverage) {
       outputChannel.appendLine(`  📈 Org-wide Coverage: ${orgCoverage}`);
+    }
+    if (testCoverage || orgCoverage) {
       outputChannel.appendLine('');
     }
   }
