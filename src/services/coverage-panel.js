@@ -137,18 +137,30 @@ class CoverageTreeDataProvider {
   async getRootItems() {
     const items = [];
     
-    // Check org connection
-    const orgStatus = sourceTracking.getCachedOrgConnection();
+    // Check org connection - always try fresh check for tree view
+    let orgStatus;
+    try {
+      orgStatus = await sourceTracking.checkOrgConnection();
+    } catch (error) {
+      logger.log(`Coverage panel getRootItems: connection check failed - ${error.message}`, 'WARN');
+      orgStatus = { connected: false };
+    }
+    
     if (!orgStatus.connected) {
-      items.push(new CoverageTreeItem(
+      const notConnectedItem = new CoverageTreeItem(
         'Not connected to org',
         vscode.TreeItemCollapsibleState.None,
         null,
         null,
-        'info'
-      ));
-      items[0].iconPath = new vscode.ThemeIcon('warning');
-      items[0].description = 'Connect to an org to view coverage';
+        'notConnected'
+      );
+      notConnectedItem.iconPath = new vscode.ThemeIcon('warning');
+      notConnectedItem.description = 'Click refresh to retry';
+      notConnectedItem.command = {
+        command: 'sf-metadata-tracker.refreshCoveragePanel',
+        title: 'Refresh',
+      };
+      items.push(notConnectedItem);
       return items;
     }
     
@@ -342,9 +354,19 @@ function isTestClass(name, filePath) {
  * Fetch coverage for all classes from org
  */
 async function fetchAllCoverage() {
-  const orgStatus = sourceTracking.getCachedOrgConnection();
+  // Always try to check connection fresh when fetching coverage
+  let orgStatus;
+  try {
+    orgStatus = await sourceTracking.checkOrgConnection();
+    logger.log(`Coverage panel: org connection check result - connected: ${orgStatus.connected}`);
+  } catch (error) {
+    logger.log(`Coverage panel: org connection check failed - ${error.message}`, 'WARN');
+    orgStatus = { connected: false };
+  }
+  
   if (!orgStatus.connected) {
     logger.log('Cannot fetch coverage: not connected to org');
+    treeDataProvider?.refresh();
     return;
   }
 

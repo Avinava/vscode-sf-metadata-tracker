@@ -234,6 +234,10 @@ class Extension {
         command: `${EXTENSION_ID}.runTestClass`,
         callback: () => codeCoverage.runCurrentTestClass(),
       },
+      {
+        command: `${EXTENSION_ID}.runAllTests`,
+        callback: () => codeCoverage.runAllLocalTests(),
+      },
     ];
 
     commands.forEach(({ command, callback }) => {

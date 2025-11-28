@@ -515,7 +515,7 @@ export async function runCurrentTestClass() {
     // Not a test class - offer to find and run tests for this class
     const action = await vscode.window.showQuickPick([
       { label: '$(search) Find Tests for This Class', description: 'Search for test classes that cover this class', value: 'find' },
-      { label: '$(play) Run All Tests', description: 'Run all tests in the org (slow)', value: 'all' },
+      { label: '$(play-circle) Run All Local Tests', description: 'Run all local tests in the org', value: 'all' },
     ], {
       placeHolder: `${apexName} is not a test class. What would you like to do?`,
     });
@@ -524,7 +524,7 @@ export async function runCurrentTestClass() {
       // Try to find test classes that might test this class
       await findAndRunTestsForClass(apexName);
     } else if (action?.value === 'all') {
-      vscode.window.showWarningMessage('Running all tests can take a long time. Use "sf apex run test" in terminal for more control.');
+      await runAllLocalTests();
     }
     return;
   }
@@ -784,6 +784,199 @@ function displayTestResults(outputChannel, testResult, testClassName) {
   }
   outputChannel.appendLine(`  Finished: ${new Date().toLocaleString()}`);
   outputChannel.appendLine('════════════════════════════════════════════════════════════════');
+}
+
+/**
+ * Run all local tests in the org with progress tracking
+ * Uses async test execution with polling for real-time progress
+ */
+export async function runAllLocalTests() {
+  // Confirm with user since this can take a long time
+  const confirm = await vscode.window.showWarningMessage(
+    'Running all local tests can take several minutes. Continue?',
+    { modal: true },
+    'Run Tests',
+    'Cancel'
+  );
+  
+  if (confirm !== 'Run Tests') {
+    return;
+  }
+
+  // Create output channel for test results
+  const outputChannel = vscode.window.createOutputChannel('SF Apex Tests', 'log');
+  outputChannel.show(true);
+  outputChannel.clear();
+  
+  outputChannel.appendLine(`════════════════════════════════════════════════════════════════`);
+  outputChannel.appendLine(`  Running All Local Tests`);
+  outputChannel.appendLine(`  Started: ${new Date().toLocaleString()}`);
+  outputChannel.appendLine(`════════════════════════════════════════════════════════════════`);
+  outputChannel.appendLine('');
+  outputChannel.appendLine('⏳ Submitting test run to Salesforce org...');
+  outputChannel.appendLine('   This will run all local tests (excluding managed package tests).');
+  outputChannel.appendLine('   Progress will be shown as tests complete.');
+  outputChannel.appendLine('');
+
+  // Use withProgress for cancellable progress
+  await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: 'Running All Local Tests',
+    cancellable: true,
+  }, async (progress, token) => {
+    
+    try {
+      // First, submit the test run asynchronously
+      progress.report({ message: '$(sync~spin) Submitting test run to org...' });
+      outputChannel.appendLine('📤 Submitting async test run...');
+      
+      const submitResult = await shell.execCommandWithTimeout(
+        `sf apex run test --test-level RunLocalTests --result-format json --json`,
+        60000 // 1 minute to submit
+      );
+      
+      const submitData = JSON.parse(submitResult);
+      
+      if (submitData.status !== 0 || !submitData.result?.testRunId) {
+        throw new Error('Failed to submit test run: ' + JSON.stringify(submitData));
+      }
+      
+      const testRunId = submitData.result.testRunId;
+      outputChannel.appendLine(`✅ Test run submitted. ID: ${testRunId}`);
+      outputChannel.appendLine('');
+      outputChannel.appendLine('📊 Polling for progress...');
+      outputChannel.appendLine('');
+      
+      // Poll for test results
+      let completed = false;
+      let lastProgress = 0;
+      let pollCount = 0;
+      const maxPolls = 600; // 30 minutes max (polling every 3 seconds)
+      const startTime = Date.now();
+      
+      // Show initial waiting state
+      progress.report({ message: '$(sync~spin) Waiting for tests to start...' });
+      
+      while (!completed && pollCount < maxPolls) {
+        // Check for cancellation
+        if (token.isCancellationRequested) {
+          outputChannel.appendLine('');
+          outputChannel.appendLine('⚠️ Test run cancelled by user');
+          outputChannel.appendLine('   Note: Tests may still be running in the org.');
+          vscode.window.showWarningMessage('Test run cancelled. Tests may still be running in the org.');
+          return;
+        }
+        
+        // Wait before polling (start after 2 seconds, then every 3 seconds)
+        await new Promise(resolve => setTimeout(resolve, pollCount === 0 ? 2000 : 3000));
+        pollCount++;
+        
+        try {
+          // Query test run status
+          const statusQuery = `SELECT Id, Status, JobItemsProcessed, TotalJobItems, NumberOfErrors FROM ApexTestRunResult WHERE AsyncApexJobId = '${testRunId}' LIMIT 1`;
+          const statusResult = await shell.execCommandWithTimeout(
+            `sf data query --query "${statusQuery}" --use-tooling-api --json`,
+            30000
+          );
+          
+          const statusData = JSON.parse(statusResult);
+          const record = statusData.result?.records?.[0];
+          
+          if (record) {
+            const status = record.Status;
+            const processed = record.JobItemsProcessed || 0;
+            const total = record.TotalJobItems || 0;
+            const errors = record.NumberOfErrors || 0;
+            const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+            const elapsed = Math.round((Date.now() - startTime) / 1000);
+            const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
+            
+            // Update progress bar with spinning icon and detailed status
+            if (total > 0) {
+              const statusIcon = status === 'Completed' ? '$(check)' : status === 'Failed' ? '$(error)' : '$(sync~spin)';
+              const errorText = errors > 0 ? ` | $(error) ${errors} failed` : '';
+              progress.report({ 
+                message: `${statusIcon} ${processed}/${total} tests (${percentage}%) | ${elapsedStr}${errorText}`,
+                increment: percentage - lastProgress
+              });
+              lastProgress = percentage;
+            } else {
+              // Tests haven't started processing yet
+              progress.report({ 
+                message: `$(sync~spin) Queued... waiting to start | ${elapsedStr}`
+              });
+            }
+            
+            // Log progress periodically
+            if (pollCount % 5 === 0 || status === 'Completed' || status === 'Failed' || status === 'Aborted') {
+              outputChannel.appendLine(`  [${elapsedStr}] Status: ${status} | Progress: ${processed}/${total} (${percentage}%)${errors > 0 ? ` | Errors: ${errors}` : ''}`);
+            }
+            
+            // Check if completed
+            if (status === 'Completed' || status === 'Failed' || status === 'Aborted') {
+              completed = true;
+              outputChannel.appendLine('');
+              outputChannel.appendLine(`✅ Test run ${status.toLowerCase()}.`);
+              outputChannel.appendLine('');
+            }
+          }
+        } catch (pollError) {
+          // Ignore polling errors, just continue
+          if (pollCount % 10 === 0) {
+            outputChannel.appendLine(`  [Polling...] ${pollError.message}`);
+          }
+        }
+      }
+      
+      if (!completed) {
+        outputChannel.appendLine('');
+        outputChannel.appendLine('⚠️ Polling timeout. Fetching final results...');
+      }
+      
+      // Fetch final results with coverage
+      progress.report({ message: '$(sync~spin) Fetching results with coverage data...' });
+      outputChannel.appendLine('');
+      outputChannel.appendLine('📥 Fetching detailed results...');
+      
+      const resultCmd = `sf apex get test --test-run-id ${testRunId} --code-coverage --result-format json`;
+      const finalResult = await shell.execCommandWithTimeout(resultCmd, 120000); // 2 min timeout
+      
+      const testResult = JSON.parse(finalResult);
+      
+      // Display results
+      displayTestResults(outputChannel, testResult, 'All Local Tests');
+      
+      // Clear coverage cache to get fresh data
+      clearCache();
+      
+      // Refresh coverage panel with new data
+      await coveragePanel.refresh();
+      
+      // Refresh coverage display for current file
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        await updateCoverageDisplay(editor);
+      }
+      
+    } catch (error) {
+      outputChannel.appendLine('');
+      outputChannel.appendLine(`❌ ERROR: ${error.message}`);
+      outputChannel.appendLine('');
+      
+      // Try to parse error output if it's JSON
+      try {
+        const errorData = JSON.parse(error.message);
+        if (errorData.result) {
+          displayTestResults(outputChannel, errorData, 'All Local Tests');
+        }
+      } catch {
+        // Not JSON, show raw error
+        outputChannel.appendLine('Check org connection and try again.');
+      }
+      
+      vscode.window.showErrorMessage(`Test run failed: ${error.message.substring(0, 100)}...`);
+    }
+  });
 }
 
 /**

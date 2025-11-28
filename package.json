@@ -2,7 +2,7 @@
   "name": "sf-metadata-tracker",
   "displayName": "SF Metadata Tracker",
   "description": "Track and display sync status indicators for Salesforce metadata files in VS Code",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "publisher": "avidev9",
   "type": "module",
   "scripts": {
@@ -171,10 +171,21 @@
         "title": "SF Metadata Tracker: Export Code Coverage",
         "shortTitle": "Export Coverage",
         "icon": "$(export)"
+      },
+      {
+        "command": "sf-metadata-tracker.runAllTests",
+        "title": "SF Metadata Tracker: Run All Local Tests",
+        "shortTitle": "Run All Tests",
+        "icon": "$(run-all)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "sf-metadata-tracker.runAllTests",
+          "when": "view == sfCoveragePanel",
+          "group": "navigation@0"
+        },
         {
           "command": "sf-metadata-tracker.exportCoverage",
           "when": "view == sfCoveragePanel",
@@ -234,6 +245,10 @@
         {
           "command": "sf-metadata-tracker.runTestClass",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen && resourceExtname =~ /\\.cls$/"
+        },
+        {
+          "command": "sf-metadata-tracker.runAllTests",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
         }
       ],
       "editor/context": [

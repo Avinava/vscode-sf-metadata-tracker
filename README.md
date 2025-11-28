@@ -2,12 +2,18 @@
 
 [![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue?logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.8.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
+[![Version](https://img.shields.io/badge/version-1.9.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
 
 Track and display sync status indicators for Salesforce metadata files in VS Code. Get real-time visibility into your metadata's org status, including who last modified it, when, and code coverage metrics.
 
 <p align="center">
   <img src="assets/icon.png" alt="SF Metadata Tracker" width="128" height="128">
+</p>
+
+## Screenshot
+
+<p align="center">
+  <img src="screenshots/screenshot.png" alt="SF Metadata Tracker Screenshot" width="800">
 </p>
 
 ## Features
@@ -35,6 +41,7 @@ Track and display sync status indicators for Salesforce metadata files in VS Cod
 ### 🧪 Code Coverage & Testing
 - **Code Coverage Panel** in Explorer sidebar showing coverage for all classes
 - **Export coverage** to CSV or JSON for reporting and analysis
+- **Run All Local Tests** with real-time progress tracking
 - View org-wide coverage summary with color-coded status
 - Click on any class to open file and show coverage highlighting
 - View code coverage percentage for Apex classes and triggers
@@ -109,6 +116,7 @@ Access these commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 | `SF Metadata Tracker: Toggle Code Coverage Highlighting` | Show/hide coverage highlighting for Apex files |
 | `SF Metadata Tracker: Refresh Code Coverage` | Refresh coverage data from org |
 | `SF Metadata Tracker: Run Apex Tests` | Run tests for the current Apex class |
+| `SF Metadata Tracker: Run All Local Tests` | Run all local tests with progress tracking |
 | `SF Metadata Tracker: Refresh Coverage Panel` | Refresh the code coverage panel |
 | `SF Metadata Tracker: Export Code Coverage` | Export coverage data to CSV or JSON |
 
@@ -188,11 +196,11 @@ yarn package
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes in each version.
 
-### Recent Highlights (v1.8.0)
+### Recent Highlights (v1.9.0)
+- **Run All Local Tests** - Run all tests with real-time progress tracking
 - **Export Code Coverage** - Export coverage data to CSV or JSON for reporting
 - **SF Code Coverage Panel** - Sidebar panel showing coverage for all Apex classes
 - Click on any class to open file and show coverage highlighting
-- Auto-refresh coverage after running tests
 
 ## License
 

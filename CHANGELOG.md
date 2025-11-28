@@ -5,6 +5,18 @@ All notable changes to the SF Metadata Tracker extension will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2025-11-28
+
+### Added
+
+- **Run All Local Tests** - Run all local tests in the org with real-time progress tracking
+  - Async test execution with live progress updates
+  - Shows tests completed, percentage, and failure count during execution
+  - Cancellable operation (tests may continue in org)
+  - Play button in coverage panel title bar for quick access
+  - Available via command palette: "SF Metadata Tracker: Run All Local Tests"
+  - Automatically refreshes coverage data when tests complete
+
 ## [1.8.0] - 2025-11-28
 
 ### Added
