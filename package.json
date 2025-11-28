@@ -2,7 +2,7 @@
   "name": "sf-metadata-tracker",
   "displayName": "SF Metadata Tracker",
   "description": "Track and display sync status indicators for Salesforce metadata files in VS Code",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "publisher": "avidev9",
   "type": "module",
   "scripts": {
@@ -50,6 +50,24 @@
         }
       }
     },
+    "views": {
+      "explorer": [
+        {
+          "id": "sfCoveragePanel",
+          "name": "SF Code Coverage",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed",
+          "icon": "$(beaker)",
+          "contextualTitle": "SF Code Coverage"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sfCoveragePanel",
+        "contents": "No code coverage data loaded.\n[Refresh Coverage](command:sf-metadata-tracker.refreshCoveragePanel)\n\nRun Apex tests to generate coverage data.",
+        "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "SF Metadata Tracker",
@@ -141,10 +159,27 @@
         "title": "SF Metadata Tracker: Run Apex Tests",
         "shortTitle": "Run Tests",
         "icon": "$(play)"
+      },
+      {
+        "command": "sf-metadata-tracker.refreshCoveragePanel",
+        "title": "SF Metadata Tracker: Refresh Coverage Panel",
+        "shortTitle": "Refresh Panel",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "sf-metadata-tracker.refreshCoveragePanel",
+          "when": "view == sfCoveragePanel",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "sf-metadata-tracker.refreshCoveragePanel",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
+        },
         {
           "command": "sf-metadata-tracker.showFileOrgStatus",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen"

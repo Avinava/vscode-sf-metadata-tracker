@@ -2,7 +2,7 @@
 
 [![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue?logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
+[![Version](https://img.shields.io/badge/version-1.7.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
 
 Track and display sync status indicators for Salesforce metadata files in VS Code. Get real-time visibility into your metadata's org status, including who last modified it, when, and code coverage metrics.
 
@@ -33,6 +33,9 @@ Track and display sync status indicators for Salesforce metadata files in VS Cod
 - Manual refresh options for on-demand status updates
 
 ### 🧪 Code Coverage & Testing
+- **Code Coverage Panel** in Explorer sidebar showing coverage for all classes
+- View org-wide coverage summary with color-coded status
+- Click on any class to open file and show coverage highlighting
 - View code coverage percentage for Apex classes and triggers
 - Toggle coverage highlighting directly in the editor
 - Visual indicators for covered/uncovered lines
@@ -105,6 +108,7 @@ Access these commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 | `SF Metadata Tracker: Toggle Code Coverage Highlighting` | Show/hide coverage highlighting for Apex files |
 | `SF Metadata Tracker: Refresh Code Coverage` | Refresh coverage data from org |
 | `SF Metadata Tracker: Run Apex Tests` | Run tests for the current Apex class |
+| `SF Metadata Tracker: Refresh Coverage Panel` | Refresh the code coverage panel |
 
 ## Extension Settings
 
@@ -180,30 +184,12 @@ yarn package
 
 ## Changelog
 
-### v1.4.0
-- Added **Run Apex Tests** command with detailed results output
-- View test results, failures, stack traces, and coverage in output panel
-- Context menu integration for quick test execution
-- Added relative time display in tooltips and status popup (e.g., "2 hours ago")
-- Added custom Salesforce-themed status bar icon
-- Added loading indicators when fetching code coverage
-- Improved status bar quick pick with detailed information
-- Bug fixes and performance improvements
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes in each version.
 
-### v1.3.0
-- Added code coverage support for Apex classes and triggers
-- Added coverage highlighting in editor
-- Added deploy/retrieve functionality
-- Added org authorization and switching
-
-### v1.2.0
-- Added file decorations in Explorer
-- Added background metadata scanning
-- Improved caching mechanism
-
-### v1.1.0
-- Initial release with status bar integration
-- Basic metadata tracking support
+### Recent Highlights (v1.7.0)
+- **SF Code Coverage Panel** - New sidebar panel showing coverage for all Apex classes
+- Click on any class to open file and show coverage highlighting
+- Auto-refresh coverage after running tests
 
 ## License
 

@@ -4,6 +4,7 @@ import * as statusBarService from './services/status-bar.js';
 import * as sourceTracking from './services/source-tracking.js';
 import * as fileDecorations from './services/file-decorations.js';
 import * as codeCoverage from './services/code-coverage.js';
+import * as coveragePanel from './services/coverage-panel.js';
 import * as sfCli from './lib/sf-cli.js';
 
 /**
@@ -76,6 +77,9 @@ class Extension {
       // Initialize code coverage service
       codeCoverage.initialize(this.context);
 
+      // Initialize code coverage panel
+      coveragePanel.initialize(this.context);
+
       // Watch for sfdx-project.json changes
       this.watchSfdxProject();
     } else {
@@ -140,6 +144,7 @@ class Extension {
       statusBarService.initialize(this.context);
       fileDecorations.initialize(this.context);
       codeCoverage.initialize(this.context);
+      coveragePanel.initialize(this.context);
       vscode.window.showInformationMessage(
         `${EXTENSION_NAME}: Salesforce DX project detected! Features activated.`
       );
@@ -148,6 +153,7 @@ class Extension {
       statusBarService.dispose();
       fileDecorations.dispose();
       codeCoverage.dispose();
+      coveragePanel.dispose();
     }
   }
 
@@ -403,4 +409,5 @@ export function deactivate() {
   statusBarService.dispose();
   fileDecorations.dispose();
   codeCoverage.dispose();
+  coveragePanel.dispose();
 }

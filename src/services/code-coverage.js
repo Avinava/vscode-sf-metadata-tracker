@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as shell from '../lib/shell.js';
 import * as logger from '../lib/logger.js';
 import * as sourceTracking from './source-tracking.js';
+import * as coveragePanel from './coverage-panel.js';
 
 /**
  * Code Coverage Service
@@ -379,6 +380,39 @@ function clearEditorDecorations(editor) {
 }
 
 /**
+ * Show coverage highlighting for a specific file/editor
+ * Called when clicking on an item in the coverage panel
+ * @param {vscode.TextEditor} editor 
+ */
+export async function showCoverageForFile(editor) {
+  if (!editor) return;
+
+  const filePath = editor.document.uri.fsPath;
+  if (!isApexFile(filePath)) {
+    return;
+  }
+
+  const apexName = getApexName(filePath);
+  const apexType = filePath.endsWith('.trigger') ? 'ApexTrigger' : 'ApexClass';
+  
+  // Show loading state
+  vscode.window.setStatusBarMessage('$(sync~spin) Loading coverage...', 3000);
+  
+  const coverage = await getAggregateCoverage(apexName, apexType);
+  if (coverage && !coverage.noData) {
+    // Enable coverage visible flag
+    coverageVisible = true;
+    applyLineDecorations(editor, coverage);
+    vscode.window.setStatusBarMessage(`$(eye) Coverage: ${coverage.percentage}%`, 3000);
+  } else {
+    vscode.window.setStatusBarMessage('$(warning) No coverage data available', 2000);
+  }
+  
+  // Update status bar
+  await updateCoverageDisplay(editor);
+}
+
+/**
  * Toggle coverage line highlighting
  */
 export async function toggleCoverage() {
@@ -590,6 +624,9 @@ async function runTestClass(testClassName) {
       
       // Clear coverage cache to get fresh data
       clearCache();
+      
+      // Refresh coverage panel with new data
+      await coveragePanel.refresh();
       
       // Refresh coverage display for current file
       const editor = vscode.window.activeTextEditor;
