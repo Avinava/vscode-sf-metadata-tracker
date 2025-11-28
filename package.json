@@ -59,6 +59,16 @@
           "type": "number",
           "default": 60,
           "description": "Cache time-to-live in seconds for file status"
+        },
+        "sfMetadataTracker.showScanSummary": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a brief summary in status bar after scanning files"
+        },
+        "sfMetadataTracker.showCoverageStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show code coverage percentage in status bar for Apex files"
         }
       }
     },
@@ -104,6 +114,18 @@
         "title": "SF Metadata Tracker: Switch Default Org",
         "shortTitle": "Switch Org",
         "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "sf-metadata-tracker.toggleCoverage",
+        "title": "SF Metadata Tracker: Toggle Code Coverage Highlighting",
+        "shortTitle": "Toggle Coverage",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "sf-metadata-tracker.refreshCoverage",
+        "title": "SF Metadata Tracker: Refresh Code Coverage",
+        "shortTitle": "Refresh Coverage",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -135,6 +157,14 @@
         {
           "command": "sf-metadata-tracker.switchOrg",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
+        },
+        {
+          "command": "sf-metadata-tracker.toggleCoverage",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen && resourceExtname =~ /\\.(cls|trigger)$/"
+        },
+        {
+          "command": "sf-metadata-tracker.refreshCoverage",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen && resourceExtname =~ /\\.(cls|trigger)$/"
         }
       ],
       "editor/context": [

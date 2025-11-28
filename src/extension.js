@@ -3,6 +3,7 @@ import { EXTENSION_NAME, EXTENSION_ID } from './lib/constants.js';
 import * as statusBarService from './services/status-bar.js';
 import * as sourceTracking from './services/source-tracking.js';
 import * as fileDecorations from './services/file-decorations.js';
+import * as codeCoverage from './services/code-coverage.js';
 import * as sfCli from './lib/sf-cli.js';
 
 /**
@@ -72,6 +73,9 @@ class Extension {
       // Initialize file decorations for sync status
       fileDecorations.initialize(this.context);
 
+      // Initialize code coverage service
+      codeCoverage.initialize(this.context);
+
       // Watch for sfdx-project.json changes
       this.watchSfdxProject();
     } else {
@@ -135,6 +139,7 @@ class Extension {
       // Activate features
       statusBarService.initialize(this.context);
       fileDecorations.initialize(this.context);
+      codeCoverage.initialize(this.context);
       vscode.window.showInformationMessage(
         `${EXTENSION_NAME}: Salesforce DX project detected! Features activated.`
       );
@@ -142,6 +147,7 @@ class Extension {
       // Hide/dispose features when leaving SFDX project
       statusBarService.dispose();
       fileDecorations.dispose();
+      codeCoverage.dispose();
     }
   }
 
@@ -209,6 +215,14 @@ class Extension {
       {
         command: `${EXTENSION_ID}.switchOrg`,
         callback: () => this.switchOrg(),
+      },
+      {
+        command: `${EXTENSION_ID}.toggleCoverage`,
+        callback: () => codeCoverage.toggleCoverage(),
+      },
+      {
+        command: `${EXTENSION_ID}.refreshCoverage`,
+        callback: () => codeCoverage.refreshCoverage(),
       },
     ];
 
@@ -384,4 +398,5 @@ export function activate(context) {
 export function deactivate() {
   statusBarService.dispose();
   fileDecorations.dispose();
+  codeCoverage.dispose();
 }

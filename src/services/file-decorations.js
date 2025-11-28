@@ -338,14 +338,25 @@ async function prefetchAllSalesforceFiles() {
   const diffCache = sourceTracking.getDiffCache();
   logger.log(`Content comparison complete. Diff cache has ${diffCache.size} entries`);
   
-  const changedCount = Array.from(diffCache.values()).filter(v => v.hasDifference).length;
-  if (changedCount > 0) {
-    logger.log(`Found ${changedCount} files with differences`);
-    for (const [filePath, data] of diffCache.entries()) {
-      if (data.hasDifference) {
-        logger.log(`  - ${filePath.split('/').pop()}`);
+  // Count files by status
+  const localChanges = [];
+  const orgNewer = [];
+  for (const [filePath, data] of diffCache.entries()) {
+    if (data.hasDifference) {
+      const fileName = filePath.split('/').pop();
+      if (data.isOrgNewer) {
+        orgNewer.push(fileName);
+      } else {
+        localChanges.push(fileName);
       }
     }
+  }
+  
+  const changedCount = localChanges.length + orgNewer.length;
+  if (changedCount > 0) {
+    logger.log(`Found ${changedCount} files with differences`);
+    localChanges.forEach(f => logger.log(`  - ${f}`));
+    orgNewer.forEach(f => logger.log(`  - ${f} (org newer)`));
   } else {
     logger.log('All files are in sync with org');
   }
@@ -365,6 +376,45 @@ async function prefetchAllSalesforceFiles() {
   // Hide progress
   statusBar.hidePrefetchProgress(totalUniqueFiles);
   logger.log('Prefetch complete');
+  
+  // Show summary notification (non-intrusive)
+  showScanSummary(totalUniqueFiles, localChanges, orgNewer);
+}
+
+/**
+ * Show a summary notification after scan completes
+ * @param {number} totalFiles 
+ * @param {string[]} localChanges 
+ * @param {string[]} orgNewer 
+ */
+async function showScanSummary(totalFiles, localChanges, orgNewer) {
+  const config = vscode.workspace.getConfiguration('sfMetadataTracker');
+  if (!config.get('showScanSummary', true)) {
+    return;
+  }
+
+  const localCount = localChanges.length;
+  const orgCount = orgNewer.length;
+  const totalChanges = localCount + orgCount;
+
+  // Build message
+  let message;
+  if (totalChanges === 0) {
+    message = `$(check) SF Metadata: ${totalFiles} files scanned, all in sync`;
+  } else {
+    const parts = [];
+    if (localCount > 0) {
+      parts.push(`${localCount} local change${localCount > 1 ? 's' : ''}`);
+    }
+    if (orgCount > 0) {
+      parts.push(`${orgCount} org update${orgCount > 1 ? 's' : ''}`);
+    }
+    message = `$(cloud) SF Metadata: ${parts.join(', ')}`;
+  }
+
+  // Use status bar message for brief non-intrusive notification
+  // It auto-dismisses after 5 seconds
+  vscode.window.setStatusBarMessage(message, 5000);
 }
 
 /**
