@@ -169,20 +169,22 @@ export async function updateSyncStatus(filePath) {
  * @returns {string}
  */
 function buildFileStatusTooltip(fileStatus, orgStatus) {
+  const lastModifiedRelative = formatRelativeTime(fileStatus.lastModifiedDate);
   const lines = [
     `📁 ${fileStatus.type}: ${fileStatus.name}`,
     ``,
     `🔗 Org: ${orgStatus.alias || orgStatus.username}`,
     ``,
-    `✏️ Last Modified:`,
+    `✏️ Last Modified: ${lastModifiedRelative}`,
     `   By: ${fileStatus.lastModifiedBy || 'Unknown'}`,
     `   On: ${formatFullDate(fileStatus.lastModifiedDate)}`,
   ];
 
   if (fileStatus.createdBy) {
+    const createdRelative = formatRelativeTime(fileStatus.createdDate);
     lines.push(
       ``,
-      `📝 Created:`,
+      `📝 Created: ${createdRelative}`,
       `   By: ${fileStatus.createdBy}`,
       `   On: ${formatFullDate(fileStatus.createdDate)}`
     );
@@ -202,6 +204,46 @@ function formatFullDate(dateString) {
   if (!dateString) return 'Unknown';
   const date = new Date(dateString);
   return date.toLocaleString();
+}
+
+/**
+ * Format relative time (e.g., "2 hours ago", "3 days ago")
+ * @param {string} dateString 
+ * @returns {string}
+ */
+function formatRelativeTime(dateString) {
+  if (!dateString) return '';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffSeconds < 60) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  if (diffWeeks < 4) return `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''} ago`;
+  if (diffMonths < 12) return `${diffMonths} month${diffMonths !== 1 ? 's' : ''} ago`;
+  return `${diffYears} year${diffYears !== 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Format date with relative time
+ * @param {string} dateString 
+ * @returns {string}
+ */
+function formatDateWithRelative(dateString) {
+  if (!dateString) return 'Unknown';
+  const fullDate = formatFullDate(dateString);
+  const relative = formatRelativeTime(dateString);
+  return `${fullDate} (${relative})`;
 }
 
 /**
@@ -282,11 +324,13 @@ export async function showFileOrgStatusDetails() {
   const items = [
     {
       label: `$(account) Last Modified By: ${fileStatus.lastModifiedBy}`,
-      description: formatFullDate(fileStatus.lastModifiedDate),
+      description: formatRelativeTime(fileStatus.lastModifiedDate),
+      detail: formatFullDate(fileStatus.lastModifiedDate),
     },
     {
       label: `$(calendar) Created By: ${fileStatus.createdBy}`,
-      description: formatFullDate(fileStatus.createdDate),
+      description: formatRelativeTime(fileStatus.createdDate),
+      detail: formatFullDate(fileStatus.createdDate),
     },
     {
       label: `$(sf-tracker) Org: ${orgStatus.alias || orgStatus.username}`,
