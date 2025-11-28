@@ -267,6 +267,13 @@ export async function updateCoverageDisplay(editor) {
   // Determine type
   const apexType = filePath.endsWith('.trigger') ? 'ApexTrigger' : 'ApexClass';
   
+  // Show loading state
+  coverageStatusBarItem.text = '$(sync~spin) Loading...';
+  coverageStatusBarItem.tooltip = 'Fetching code coverage data...';
+  coverageStatusBarItem.backgroundColor = undefined;
+  coverageStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  coverageStatusBarItem.show();
+  
   logger.log(`Fetching coverage for ${apexName} (${apexType})...`);
   
   // Fetch coverage
@@ -386,10 +393,16 @@ export async function toggleCoverage() {
     if (isApexFile(filePath)) {
       const apexName = getApexName(filePath);
       const apexType = filePath.endsWith('.trigger') ? 'ApexTrigger' : 'ApexClass';
+      
+      // Show loading state
+      vscode.window.setStatusBarMessage('$(sync~spin) Loading coverage...', 3000);
+      
       const coverage = await getAggregateCoverage(apexName, apexType);
       if (coverage && !coverage.noData) {
         applyLineDecorations(editor, coverage);
         vscode.window.setStatusBarMessage('$(eye) Coverage highlighting enabled', 2000);
+      } else {
+        vscode.window.setStatusBarMessage('$(warning) No coverage data available', 2000);
       }
     }
   } else {
@@ -418,8 +431,17 @@ export async function refreshCoverage() {
   // Clear cache to force refresh
   coverageCache.delete(`${apexType}:${apexName}`);
   
-  vscode.window.setStatusBarMessage('$(sync~spin) Refreshing coverage...', 2000);
+  // Show loading state in status bar
+  if (coverageStatusBarItem) {
+    coverageStatusBarItem.text = '$(sync~spin) Refreshing...';
+    coverageStatusBarItem.tooltip = 'Refreshing code coverage data from org...';
+    coverageStatusBarItem.backgroundColor = undefined;
+    coverageStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+    coverageStatusBarItem.show();
+  }
+  
   await updateCoverageDisplay(editor);
+  vscode.window.setStatusBarMessage('$(check) Coverage refreshed', 2000);
 }
 
 /**
