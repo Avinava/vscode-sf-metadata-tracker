@@ -409,7 +409,7 @@ async function showScanSummary(totalFiles, localChanges, orgNewer) {
     if (orgCount > 0) {
       parts.push(`${orgCount} org update${orgCount > 1 ? 's' : ''}`);
     }
-    message = `$(cloud) SF Metadata: ${parts.join(', ')}`;
+    message = `$(sf-tracker) SF Metadata: ${parts.join(', ')}`;
   }
 
   // Use status bar message for brief non-intrusive notification

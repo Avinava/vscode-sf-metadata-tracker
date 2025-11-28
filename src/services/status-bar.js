@@ -6,7 +6,7 @@ import { EXTENDED_SALESFORCE_PATHS } from '../lib/constants.js';
 const SYNC_ICON = '$(sync)';
 const SYNC_SPIN_ICON = '$(sync~spin)';
 const WARNING_ICON = '$(warning)';
-const CLOUD_ICON = '$(cloud)';
+const CLOUD_ICON = '$(sf-tracker)';  // Custom SF Metadata Tracker icon
 
 /**
  * Status bar service
@@ -155,7 +155,7 @@ export async function updateSyncStatus(filePath) {
     syncStatusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
   } else {
     // File is in sync
-    syncStatusBarItem.text = `$(cloud) ${fileStatus.lastModifiedBy || 'Unknown'}`;
+    syncStatusBarItem.text = `${CLOUD_ICON} ${fileStatus.lastModifiedBy || 'Unknown'}`;
     syncStatusBarItem.tooltip = `✓ In sync with org\n\n${buildFileStatusTooltip(fileStatus, orgStatus)}`;
     syncStatusBarItem.backgroundColor = undefined;
     syncStatusBarItem.color = new vscode.ThemeColor('charts.blue');
@@ -289,7 +289,7 @@ export async function showFileOrgStatusDetails() {
       description: formatFullDate(fileStatus.createdDate),
     },
     {
-      label: `$(cloud) Org: ${orgStatus.alias || orgStatus.username}`,
+      label: `$(sf-tracker) Org: ${orgStatus.alias || orgStatus.username}`,
       description: orgStatus.instanceUrl,
     },
     { label: '', kind: vscode.QuickPickItemKind.Separator },

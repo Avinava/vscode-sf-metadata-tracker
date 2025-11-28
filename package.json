@@ -41,6 +41,15 @@
     "eslint": "^9.13.0"
   },
   "contributes": {
+    "icons": {
+      "sf-tracker": {
+        "description": "SF Metadata Tracker Icon",
+        "default": {
+          "fontPath": "assets/status-icon.woff",
+          "fontCharacter": "\\e900"
+        }
+      }
+    },
     "configuration": {
       "type": "object",
       "title": "SF Metadata Tracker",
