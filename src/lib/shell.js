@@ -28,9 +28,22 @@ export async function execCommand(command, options = {}) {
 
   return new Promise((resolve, reject) => {
     exec(command, execOptions, (error, stdout, stderr) => {
-      if (error) {
-        logger.log(`Command failed: ${stderr}`, 'ERROR');
-        reject(new Error(`${EXTENSION_NAME}: Failed to execute command "${command}": ${stderr}`));
+      // Check if command actually failed (exit code != 0)
+      // SF CLI often outputs warnings to stderr even on success
+      if (error && error.code !== 0) {
+        // Check if stderr is just a warning (not a real error)
+        const isJustWarning = stderr && 
+          (stderr.includes('Warning:') || stderr.includes('update available')) &&
+          !stderr.includes('Error:') &&
+          stdout && stdout.trim().startsWith('{');
+        
+        if (isJustWarning) {
+          logger.log('Command succeeded (with warnings)');
+          resolve(stdout);
+        } else {
+          logger.log(`Command failed: ${stderr || error.message}`, 'ERROR');
+          reject(new Error(`${EXTENSION_NAME}: Failed to execute command "${command}": ${stderr || error.message}`));
+        }
       } else {
         logger.log('Command succeeded');
         resolve(stdout);

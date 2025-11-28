@@ -23,15 +23,6 @@ class SalesforceFileDecorationProvider {
   }
 
   /**
-   * Get recently modified hours from settings
-   * @returns {number}
-   */
-  _getRecentlyModifiedHours() {
-    const config = vscode.workspace.getConfiguration('sfMetadataTracker');
-    return config.get('recentlyModifiedHours', 24) || 24;
-  }
-
-  /**
    * Provide decoration for a file
    * @param {vscode.Uri} uri 
    * @returns {Promise<vscode.FileDecoration | undefined>}
@@ -66,8 +57,12 @@ class SalesforceFileDecorationProvider {
       return undefined;
     }
     
-    // Get file status (this uses its own cache)
-    const fileStatus = await sourceTracking.getFileOrgStatus(parentFilePath);
+    // Get diff status from cache (populated by batch comparison)
+    const diffStatus = sourceTracking.getFileDiffStatus(filePath) || 
+                       sourceTracking.getFileDiffStatus(parentFilePath);
+    
+    // Get file status - try to use cached status first to avoid redundant queries
+    const fileStatus = await sourceTracking.getFileOrgStatus(parentFilePath, true);
 
     let decoration;
 
@@ -81,30 +76,32 @@ class SalesforceFileDecorationProvider {
     } else if (fileStatus.error) {
       // Error checking - skip decoration
       return undefined;
-    } else if (fileStatus.lastModifiedBy) {
-      // File exists in org - check if it's in sync
+    } else if (diffStatus.hasDifference && diffStatus.isOrgNewer) {
+      // Org has newer version - needs to be pulled (Red download arrow)
       const timeAgo = sourceTracking.formatDate(fileStatus.lastModifiedDate);
-      const lastModifiedDate = new Date(fileStatus.lastModifiedDate);
-      const recentlyModifiedHours = this._getRecentlyModifiedHours();
-      const hoursSinceModified = (Date.now() - lastModifiedDate.getTime()) / (1000 * 60 * 60);
-
-      // Check if modified recently by someone (potential conflict warning)
-      if (hoursSinceModified < recentlyModifiedHours) {
-        // Recently modified - show warning color (someone may have changed it)
-        decoration = new vscode.FileDecoration(
-          '!', // Badge: exclamation for recent changes
-          `⚠️ Recently modified by ${fileStatus.lastModifiedBy} (${timeAgo}) - Consider pulling latest`,
-          new vscode.ThemeColor('editorWarning.foreground') // Orange/Yellow warning
-        );
-      } else {
-        // In sync - show subtle indicator (checkmark)
-        decoration = new vscode.FileDecoration(
-          '✓', // Badge: checkmark for synced
-          `✅ In sync • Last modified by ${fileStatus.lastModifiedBy} (${timeAgo})`,
-          new vscode.ThemeColor('gitDecoration.ignoredResourceForeground') // Subtle gray
-        );
-      }
+      decoration = new vscode.FileDecoration(
+        '↓', // Badge: down arrow for pull needed
+        `⬇️ Org has newer version • Modified by ${fileStatus.lastModifiedBy} (${timeAgo}) - Pull to update local`,
+        new vscode.ThemeColor('gitDecoration.deletedResourceForeground') // Red
+      );
+    } else if (diffStatus.hasDifference) {
+      // Local has changes - needs to be pushed (Yellow warning)
+      const timeAgo = sourceTracking.formatDate(fileStatus.lastModifiedDate);
+      decoration = new vscode.FileDecoration(
+        '↑', // Badge: up arrow for push needed
+        `⬆️ Local changes • Push to update org (last org version by ${fileStatus.lastModifiedBy}, ${timeAgo})`,
+        new vscode.ThemeColor('gitDecoration.modifiedResourceForeground') // Yellow/Orange
+      );
+    } else if (diffStatus.isCompared && fileStatus.lastModifiedBy) {
+      // File has been compared and is in sync
+      const timeAgo = sourceTracking.formatDate(fileStatus.lastModifiedDate);
+      decoration = new vscode.FileDecoration(
+        '✓', // Badge: checkmark for synced
+        `☁️ In sync with org • Last modified by ${fileStatus.lastModifiedBy} (${timeAgo})`,
+        new vscode.ThemeColor('gitDecoration.ignoredResourceForeground') // Subtle gray
+      );
     }
+    // Note: If not compared yet, we don't show any decoration (no premature checkmarks)
 
     // Cache the decoration using parent file path
     if (decoration) {
@@ -231,27 +228,39 @@ async function prefetchAllSalesforceFiles() {
   // Show initial progress
   statusBar.showPrefetchProgress(0, allFiles.length);
 
-  // Group files by metadata type for batch queries
+  // Group files by metadata type for batch queries, deduplicating by name+type
   const filesByType = new Map();
+  const allFilesForComparison = [];
+  const seenFiles = new Set(); // Track unique name+type combinations
   
   for (const uri of allFiles) {
     const metadataInfo = sourceTracking.getMetadataTypeFromPath(uri.fsPath);
     if (metadataInfo) {
+      // Deduplicate by type+name to avoid redundant queries
+      const uniqueKey = `${metadataInfo.type}:${metadataInfo.name}`;
+      if (seenFiles.has(uniqueKey)) {
+        continue; // Skip duplicates
+      }
+      seenFiles.add(uniqueKey);
+      
       if (!filesByType.has(metadataInfo.type)) {
         filesByType.set(metadataInfo.type, []);
       }
-      filesByType.get(metadataInfo.type).push({
+      const fileInfo = {
         uri,
         filePath: uri.fsPath,
         name: metadataInfo.name,
-      });
+        type: metadataInfo.type,
+      };
+      filesByType.get(metadataInfo.type).push(fileInfo);
+      allFilesForComparison.push(fileInfo);
     }
   }
 
   let processedCount = 0;
   const batchSize = 50; // Query up to 50 items of the same type at once
 
-  // Process each metadata type
+  // Phase 1: Fetch metadata info (who modified, when) using batch SOQL
   for (const [metadataType, files] of filesByType) {
     // Process in batches within each type
     for (let i = 0; i < files.length; i += batchSize) {
@@ -268,16 +277,8 @@ async function prefetchAllSalesforceFiles() {
       processedCount += batch.length;
       statusBar.showPrefetchProgress(processedCount, allFiles.length);
 
-      // Fire decoration change events for the batch (both main file and meta file)
-      batch.forEach(({ uri }) => {
-        if (decorationProvider) {
-          // Fire for the main file
-          decorationProvider._onDidChangeFileDecorations.fire(uri);
-          // Fire for the meta file too (e.g., .cls-meta.xml)
-          const metaUri = vscode.Uri.file(uri.fsPath + '-meta.xml');
-          decorationProvider._onDidChangeFileDecorations.fire(metaUri);
-        }
-      });
+      // Don't fire decoration events during prefetch - wait for content comparison
+      // This prevents premature checkmarks from appearing
 
       // Small delay between batches to avoid overwhelming the org
       if (i + batchSize < files.length) {
@@ -289,6 +290,74 @@ async function prefetchAllSalesforceFiles() {
   // Hide progress and show completion
   statusBar.hidePrefetchProgress(allFiles.length);
   logger.log('Prefetch complete');
+
+  // Phase 2: Background content comparison (runs after initial prefetch)
+  // This compares actual file contents with org versions
+  setTimeout(async () => {
+    logger.log('Starting background content comparison...');
+    
+    try {
+      // Decoration callback to stream updates as each file is compared
+      const onFileCompared = (uri, hasDifference, isOrgNewer) => {
+        if (decorationProvider) {
+          // Clear cache for this file and fire decoration change
+          decorationProvider._decorationCache.delete(uri.fsPath);
+          decorationProvider._onDidChangeFileDecorations.fire(uri);
+          // Also update meta file
+          const metaUri = vscode.Uri.file(uri.fsPath + '-meta.xml');
+          decorationProvider._decorationCache.delete(metaUri.fsPath);
+          decorationProvider._onDidChangeFileDecorations.fire(metaUri);
+        }
+      };
+      
+      await sourceTracking.batchCompareFilesWithOrg(allFilesForComparison, (current, total) => {
+        statusBar.showCompareProgress(current, total);
+      }, onFileCompared);
+      
+      logger.log('Content comparison complete, refreshing decorations...');
+      
+      // Log diff cache state for debugging
+      const diffCache = sourceTracking.getDiffCache();
+      logger.log(`Diff cache has ${diffCache.size} entries`);
+      
+      // Show completion message
+      const changedCount = Array.from(diffCache.values()).filter(v => v.hasDifference).length;
+      if (changedCount > 0) {
+        logger.log(`Found ${changedCount} files with local changes`);
+        // Log which files have changes
+        for (const [filePath, data] of diffCache.entries()) {
+          if (data.hasDifference) {
+            logger.log(`  - ${filePath.split('/').pop()}`);
+          }
+        }
+      } else {
+        logger.log('All files are in sync with org');
+      }
+      
+      // Refresh decorations to show difference indicators
+      if (decorationProvider) {
+        decorationProvider._decorationCache.clear();
+        decorationProvider._onDidChangeFileDecorations.fire(undefined);
+      }
+      
+      // Update status bar for current file - use existing status bar module
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        await statusBar.updateSyncStatus(editor.document.uri.fsPath);
+      }
+      
+      // Hide progress after comparison complete
+      statusBar.hidePrefetchProgress(allFilesForComparison.length);
+    } catch (error) {
+      logger.log(`Content comparison failed: ${error.message}`, 'WARN');
+      statusBar.hidePrefetchProgress(0);
+      // Still update status bar even on error
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        await statusBar.updateSyncStatus(editor.document.uri.fsPath);
+      }
+    }
+  }, 2000);
 }
 
 /**
@@ -351,10 +420,19 @@ export function refreshFile(uri) {
 
 /**
  * Refresh all file decorations
+ * @param {boolean} recompare - Whether to re-compare files with org
  */
-export function refreshAll() {
+export async function refreshAll(recompare = true) {
   if (decorationProvider) {
-    decorationProvider.refreshAll();
+    // Clear all caches - both metadata info and diff results
+    sourceTracking.clearSourceCache();
+    decorationProvider._decorationCache.clear();
+    decorationProvider._onDidChangeFileDecorations.fire(undefined);
+    
+    // Trigger a full re-prefetch if requested
+    if (recompare) {
+      await prefetchAllSalesforceFiles();
+    }
   }
 }
 

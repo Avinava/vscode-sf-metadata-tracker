@@ -3,6 +3,7 @@ import { EXTENSION_NAME, EXTENSION_ID } from './lib/constants.js';
 import * as statusBarService from './services/status-bar.js';
 import * as sourceTracking from './services/source-tracking.js';
 import * as fileDecorations from './services/file-decorations.js';
+import * as sfCli from './lib/sf-cli.js';
 
 /**
  * Check if current workspace is a Salesforce DX project
@@ -32,6 +33,7 @@ class Extension {
   constructor(context) {
     this.context = context;
     this.isSfdxProject = false;
+    this.cliInstalled = false;
   }
 
   /**
@@ -49,7 +51,20 @@ class Extension {
 
     // Only run features when in a Salesforce project
     if (this.isSfdxProject) {
-      console.log(`${EXTENSION_NAME}: SFDX project detected, activating features`);
+      console.log(`${EXTENSION_NAME}: SFDX project detected, checking prerequisites...`);
+
+      // Check if SF CLI is installed
+      const cliStatus = await sfCli.checkSfCliInstalled();
+      this.cliInstalled = cliStatus.installed;
+      await vscode.commands.executeCommand('setContext', 'sfMetadataTracker:cli_installed', this.cliInstalled);
+
+      if (!this.cliInstalled) {
+        console.log(`${EXTENSION_NAME}: Salesforce CLI not found`);
+        sfCli.promptInstallCli();
+        return;
+      }
+
+      console.log(`${EXTENSION_NAME}: CLI found, activating features`);
 
       // Initialize status bar
       statusBarService.initialize(this.context);
@@ -107,6 +122,16 @@ class Extension {
     await vscode.commands.executeCommand('setContext', 'sfMetadataTracker:project_opened', this.isSfdxProject);
 
     if (this.isSfdxProject) {
+      // Check CLI first
+      const cliStatus = await sfCli.checkSfCliInstalled();
+      this.cliInstalled = cliStatus.installed;
+      await vscode.commands.executeCommand('setContext', 'sfMetadataTracker:cli_installed', this.cliInstalled);
+
+      if (!this.cliInstalled) {
+        sfCli.promptInstallCli();
+        return;
+      }
+
       // Activate features
       statusBarService.initialize(this.context);
       fileDecorations.initialize(this.context);
@@ -134,30 +159,205 @@ class Extension {
         callback: async () => {
           const editor = vscode.window.activeTextEditor;
           if (editor) {
-            sourceTracking.invalidateFileCache(editor.document.uri.fsPath);
-            await statusBarService.updateSyncStatus(editor.document.uri.fsPath);
+            const filePath = editor.document.uri.fsPath;
+            
+            // Show syncing status
+            statusBarService.showSyncingStatus();
+            
+            // Clear cache and force re-fetch from org
+            sourceTracking.invalidateFileCache(filePath);
+            sourceTracking.clearOrgCache();
+            
+            // Fetch fresh status from org
+            await statusBarService.updateSyncStatus(filePath);
             fileDecorations.refreshFile(editor.document.uri);
-            vscode.window.showInformationMessage('File status refreshed!');
           }
         },
       },
       {
         command: `${EXTENSION_ID}.refreshAllFileStatus`,
         callback: async () => {
+          // Show syncing status
+          statusBarService.showSyncingStatus();
+          
+          // Clear all caches
           sourceTracking.clearSourceCache();
-          fileDecorations.refreshAll();
+          sourceTracking.clearOrgCache();
+          sourceTracking.clearChangesCache();
+          
+          // Trigger full refresh (will re-check local changes and re-prefetch all files)
+          await fileDecorations.refreshAll(true);
+          
           const editor = vscode.window.activeTextEditor;
           if (editor) {
             await statusBarService.updateSyncStatus(editor.document.uri.fsPath);
           }
-          vscode.window.showInformationMessage('All file statuses refreshed!');
         },
+      },
+      {
+        command: `${EXTENSION_ID}.deployCurrentFile`,
+        callback: () => this.deployCurrentFile(),
+      },
+      {
+        command: `${EXTENSION_ID}.retrieveCurrentFile`,
+        callback: () => this.retrieveCurrentFile(),
+      },
+      {
+        command: `${EXTENSION_ID}.authorizeOrg`,
+        callback: () => this.authorizeOrg(),
+      },
+      {
+        command: `${EXTENSION_ID}.switchOrg`,
+        callback: () => this.switchOrg(),
       },
     ];
 
     commands.forEach(({ command, callback }) => {
       this.context.subscriptions.push(vscode.commands.registerCommand(command, callback));
     });
+  }
+
+  /**
+   * Deploy the current file to the org
+   */
+  async deployCurrentFile() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showWarningMessage('No file is currently open.');
+      return;
+    }
+
+    const filePath = editor.document.uri.fsPath;
+    const metadataInfo = sourceTracking.getMetadataTypeFromPath(filePath);
+    
+    if (!metadataInfo) {
+      vscode.window.showWarningMessage('This is not a supported Salesforce metadata file.');
+      return;
+    }
+
+    // Save the file first
+    await editor.document.save();
+
+    const terminal = vscode.window.createTerminal('SF Deploy');
+    terminal.show();
+    terminal.sendText(`sf project deploy start --source-dir "${filePath}"`);
+
+    // Refresh status after a delay
+    setTimeout(async () => {
+      sourceTracking.invalidateFileCache(filePath);
+      await statusBarService.updateSyncStatus(filePath);
+      fileDecorations.refreshFile(editor.document.uri);
+    }, 5000);
+  }
+
+  /**
+   * Retrieve the current file from the org
+   */
+  async retrieveCurrentFile() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showWarningMessage('No file is currently open.');
+      return;
+    }
+
+    const filePath = editor.document.uri.fsPath;
+    const metadataInfo = sourceTracking.getMetadataTypeFromPath(filePath);
+    
+    if (!metadataInfo) {
+      vscode.window.showWarningMessage('This is not a supported Salesforce metadata file.');
+      return;
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+      `This will overwrite your local changes to ${metadataInfo.name}. Continue?`,
+      'Retrieve',
+      'Cancel'
+    );
+
+    if (confirm !== 'Retrieve') {
+      return;
+    }
+
+    const terminal = vscode.window.createTerminal('SF Retrieve');
+    terminal.show();
+    terminal.sendText(`sf project retrieve start --source-dir "${filePath}"`);
+
+    // Refresh status after a delay
+    setTimeout(async () => {
+      sourceTracking.invalidateFileCache(filePath);
+      await statusBarService.updateSyncStatus(filePath);
+      fileDecorations.refreshFile(editor.document.uri);
+    }, 5000);
+  }
+
+  /**
+   * Authorize a new org
+   */
+  async authorizeOrg() {
+    const authOptions = [
+      { label: '$(globe) Web Login', description: 'Authorize using browser (recommended)', value: 'web' },
+      { label: '$(device-desktop) Device Login', description: 'For headless environments', value: 'device' },
+      { label: '$(key) JWT Login', description: 'For CI/CD and automation', value: 'jwt' },
+    ];
+
+    const selected = await vscode.window.showQuickPick(authOptions, {
+      placeHolder: 'Select authorization method',
+    });
+
+    if (!selected) return;
+
+    const terminal = vscode.window.createTerminal('SF Auth');
+    terminal.show();
+
+    switch (selected.value) {
+      case 'web':
+        terminal.sendText('sf org login web');
+        break;
+      case 'device':
+        terminal.sendText('sf org login device');
+        break;
+      case 'jwt':
+        vscode.window.showInformationMessage(
+          'JWT login requires additional setup. See Salesforce CLI documentation.',
+          'Open Docs'
+        ).then(action => {
+          if (action === 'Open Docs') {
+            vscode.env.openExternal(vscode.Uri.parse('https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_auth_jwt_flow.htm'));
+          }
+        });
+        return;
+    }
+
+    // Clear cache after auth attempt
+    setTimeout(() => {
+      sourceTracking.clearOrgCache();
+      sourceTracking.clearSourceCache();
+    }, 10000);
+  }
+
+  /**
+   * Switch to a different org
+   */
+  async switchOrg() {
+    const terminal = vscode.window.createTerminal('SF Org');
+    terminal.show();
+    terminal.sendText('sf org list');
+
+    const orgAlias = await vscode.window.showInputBox({
+      prompt: 'Enter the alias or username of the org to set as default',
+      placeHolder: 'e.g., myDevOrg or user@example.com',
+    });
+
+    if (orgAlias) {
+      terminal.sendText(`sf config set target-org ${orgAlias}`);
+      
+      // Clear caches
+      sourceTracking.clearOrgCache();
+      sourceTracking.clearSourceCache();
+      fileDecorations.refreshAll();
+      
+      vscode.window.showInformationMessage(`Default org set to: ${orgAlias}`);
+    }
   }
 
   /**

@@ -100,15 +100,30 @@ export async function updateSyncStatus(filePath) {
   const orgStatus = await sourceTracking.checkOrgConnection();
 
   if (!orgStatus.connected) {
-    syncStatusBarItem.text = `$(plug) No Org`;
-    syncStatusBarItem.tooltip = 'No org connected. Click to connect.';
+    // Show appropriate status based on error type
+    if (orgStatus.errorType === 'cli_not_installed') {
+      syncStatusBarItem.text = `$(error) No SF CLI`;
+      syncStatusBarItem.tooltip = 'Salesforce CLI is not installed. Click to learn more.';
+      syncStatusBarItem.command = 'sf-metadata-tracker.authorizeOrg';
+    } else if (orgStatus.errorType === 'auth_expired') {
+      syncStatusBarItem.text = `$(key) Auth Expired`;
+      syncStatusBarItem.tooltip = 'Org authentication has expired. Click to re-authorize.';
+      syncStatusBarItem.command = 'sf-metadata-tracker.authorizeOrg';
+    } else {
+      syncStatusBarItem.text = `$(plug) No Org`;
+      syncStatusBarItem.tooltip = 'No org connected. Click to authorize.';
+      syncStatusBarItem.command = 'sf-metadata-tracker.authorizeOrg';
+    }
     syncStatusBarItem.backgroundColor = undefined;
-    syncStatusBarItem.color = new vscode.ThemeColor('disabledForeground');
+    syncStatusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
     return;
   }
 
   // Get file status from org
   const fileStatus = await sourceTracking.getFileOrgStatus(filePath);
+  
+  // Check if file has local changes (differs from org)
+  const hasChanges = sourceTracking.hasLocalChanges(filePath);
 
   if (fileStatus.error) {
     if (fileStatus.error === 'Not a Salesforce metadata file') {
@@ -132,10 +147,19 @@ export async function updateSyncStatus(filePath) {
   }
 
   // Show the status with last modified info
-  syncStatusBarItem.text = `$(account) ${fileStatus.lastModifiedBy || 'Unknown'}`;
-  syncStatusBarItem.tooltip = buildFileStatusTooltip(fileStatus, orgStatus);
-  syncStatusBarItem.backgroundColor = undefined;
-  syncStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  if (hasChanges) {
+    // File has local changes - show warning
+    syncStatusBarItem.text = `$(warning) Modified`;
+    syncStatusBarItem.tooltip = `⚠️ Local changes detected!\n\nThis file differs from the org version.\n\n${buildFileStatusTooltip(fileStatus, orgStatus)}`;
+    syncStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    syncStatusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+  } else {
+    // File is in sync
+    syncStatusBarItem.text = `$(cloud) ${fileStatus.lastModifiedBy || 'Unknown'}`;
+    syncStatusBarItem.tooltip = `✓ In sync with org\n\n${buildFileStatusTooltip(fileStatus, orgStatus)}`;
+    syncStatusBarItem.backgroundColor = undefined;
+    syncStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  }
 }
 
 /**
@@ -190,6 +214,19 @@ export function hideSyncStatus() {
 }
 
 /**
+ * Show syncing/loading status in the status bar
+ */
+export function showSyncingStatus() {
+  if (!syncStatusBarItem) return;
+  
+  syncStatusBarItem.text = `${SYNC_SPIN_ICON} Syncing...`;
+  syncStatusBarItem.tooltip = 'Fetching latest status from org...';
+  syncStatusBarItem.backgroundColor = undefined;
+  syncStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  syncStatusBarItem.show();
+}
+
+/**
  * Show detailed file org status in a message
  */
 export async function showFileOrgStatusDetails() {
@@ -204,15 +241,20 @@ export async function showFileOrgStatusDetails() {
   // Check org connection first
   const orgStatus = await sourceTracking.checkOrgConnection();
   if (!orgStatus.connected) {
+    let message = 'No org is connected.';
+    if (orgStatus.errorType === 'cli_not_installed') {
+      message = 'Salesforce CLI is not installed.';
+    } else if (orgStatus.errorType === 'auth_expired') {
+      message = 'Org authentication has expired.';
+    }
+    
     const action = await vscode.window.showWarningMessage(
-      'No org is connected. Would you like to authorize an org?',
+      `${message} Would you like to authorize an org?`,
       'Authorize Org',
       'Cancel'
     );
     if (action === 'Authorize Org') {
-      const terminal = vscode.window.createTerminal('SF Auth');
-      terminal.show();
-      terminal.sendText('sf org login web');
+      vscode.commands.executeCommand('sf-metadata-tracker.authorizeOrg');
     }
     return;
   }
@@ -221,11 +263,22 @@ export async function showFileOrgStatusDetails() {
   const fileStatus = await sourceTracking.getFileOrgStatus(filePath);
 
   if (fileStatus.error) {
+    if (fileStatus.error === 'Component not found in org') {
+      const action = await vscode.window.showInformationMessage(
+        'This component does not exist in the org yet.',
+        'Deploy to Org',
+        'Close'
+      );
+      if (action === 'Deploy to Org') {
+        vscode.commands.executeCommand('sf-metadata-tracker.deployCurrentFile');
+      }
+      return;
+    }
     vscode.window.showInformationMessage(fileStatus.error);
     return;
   }
 
-  // Show detailed info
+  // Show detailed info with actions
   const items = [
     {
       label: `$(account) Last Modified By: ${fileStatus.lastModifiedBy}`,
@@ -239,14 +292,25 @@ export async function showFileOrgStatusDetails() {
       label: `$(cloud) Org: ${orgStatus.alias || orgStatus.username}`,
       description: orgStatus.instanceUrl,
     },
+    { label: '', kind: vscode.QuickPickItemKind.Separator },
+    {
+      label: '$(cloud-upload) Deploy to Org',
+      description: 'Push local changes to org',
+      action: 'deploy',
+    },
+    {
+      label: '$(cloud-download) Retrieve from Org',
+      description: 'Pull latest from org (overwrites local)',
+      action: 'retrieve',
+    },
     {
       label: '$(refresh) Refresh Status',
       description: 'Clear cache and recheck',
       action: 'refresh',
     },
     {
-      label: '$(globe) Open in Org',
-      description: 'Open this component in the browser',
+      label: '$(globe) Open Org in Browser',
+      description: 'Open the Salesforce org',
       action: 'open',
     },
   ];
@@ -256,13 +320,20 @@ export async function showFileOrgStatusDetails() {
   });
 
   if (selected?.action === 'refresh') {
-    sourceTracking.invalidateFileCache(filePath);
+    // Import and call refreshAll to clear all caches and re-compare
+    const { refreshAll } = await import('./file-decorations.js');
+    vscode.window.showInformationMessage('Refreshing all metadata status...');
+    await refreshAll(true);
     await updateSyncStatus(filePath);
     vscode.window.showInformationMessage('Status refreshed!');
   } else if (selected?.action === 'open') {
     const terminal = vscode.window.createTerminal('SF Open');
     terminal.show();
     terminal.sendText('sf org open');
+  } else if (selected?.action === 'deploy') {
+    vscode.commands.executeCommand('sf-metadata-tracker.deployCurrentFile');
+  } else if (selected?.action === 'retrieve') {
+    vscode.commands.executeCommand('sf-metadata-tracker.retrieveCurrentFile');
   }
 }
 
@@ -284,8 +355,25 @@ export function showPrefetchProgress(current, total) {
   
   isPrefetching = true;
   const percentage = Math.round((current / total) * 100);
-  prefetchStatusBarItem.text = `${SYNC_SPIN_ICON} Syncing ${current}/${total} (${percentage}%)`;
+  prefetchStatusBarItem.text = `${SYNC_SPIN_ICON} Loading metadata ${current}/${total} (${percentage}%)`;
   prefetchStatusBarItem.tooltip = `SF Metadata Tracker: Loading file statuses from org...\n${current} of ${total} files processed`;
+  prefetchStatusBarItem.backgroundColor = undefined;
+  prefetchStatusBarItem.color = new vscode.ThemeColor('charts.blue');
+  prefetchStatusBarItem.show();
+}
+
+/**
+ * Show comparison progress in status bar
+ * @param {number} current - Current file index
+ * @param {number} total - Total number of files
+ */
+export function showCompareProgress(current, total) {
+  if (!prefetchStatusBarItem) return;
+  
+  isPrefetching = true;
+  const percentage = Math.round((current / total) * 100);
+  prefetchStatusBarItem.text = `${SYNC_SPIN_ICON} Comparing ${current}/${total} (${percentage}%)`;
+  prefetchStatusBarItem.tooltip = `SF Metadata Tracker: Comparing local files with org...\n${current} of ${total} files compared`;
   prefetchStatusBarItem.backgroundColor = undefined;
   prefetchStatusBarItem.color = new vscode.ThemeColor('charts.blue');
   prefetchStatusBarItem.show();
