@@ -2,7 +2,7 @@
   "name": "sf-metadata-tracker",
   "displayName": "SF Metadata Tracker",
   "description": "Track and display sync status indicators for Salesforce metadata files in VS Code",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "avidev9",
   "type": "module",
   "scripts": {
@@ -135,6 +135,12 @@
         "title": "SF Metadata Tracker: Refresh Code Coverage",
         "shortTitle": "Refresh Coverage",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sf-metadata-tracker.runTestClass",
+        "title": "SF Metadata Tracker: Run Apex Tests",
+        "shortTitle": "Run Tests",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -174,6 +180,10 @@
         {
           "command": "sf-metadata-tracker.refreshCoverage",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen && resourceExtname =~ /\\.(cls|trigger)$/"
+        },
+        {
+          "command": "sf-metadata-tracker.runTestClass",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && editorIsOpen && resourceExtname =~ /\\.cls$/"
         }
       ],
       "editor/context": [
@@ -181,6 +191,11 @@
           "command": "sf-metadata-tracker.deployCurrentFile",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && resourceExtname =~ /\\.(cls|trigger|page|component)$/",
           "group": "sf-metadata-tracker@1"
+        },
+        {
+          "command": "sf-metadata-tracker.runTestClass",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && resourceExtname =~ /\\.cls$/",
+          "group": "sf-metadata-tracker@2"
         }
       ],
       "explorer/context": [
@@ -188,6 +203,11 @@
           "command": "sf-metadata-tracker.deployCurrentFile",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && resourceExtname =~ /\\.(cls|trigger|page|component)$/",
           "group": "sf-metadata-tracker@1"
+        },
+        {
+          "command": "sf-metadata-tracker.runTestClass",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed && resourceExtname =~ /\\.cls$/",
+          "group": "sf-metadata-tracker@2"
         }
       ]
     }

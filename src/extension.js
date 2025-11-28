@@ -224,6 +224,10 @@ class Extension {
         command: `${EXTENSION_ID}.refreshCoverage`,
         callback: () => codeCoverage.refreshCoverage(),
       },
+      {
+        command: `${EXTENSION_ID}.runTestClass`,
+        callback: () => codeCoverage.runCurrentTestClass(),
+      },
     ];
 
     commands.forEach(({ command, callback }) => {

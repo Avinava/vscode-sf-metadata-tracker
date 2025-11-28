@@ -452,6 +452,278 @@ export function clearCache() {
 }
 
 /**
+ * Run tests for the current Apex test class
+ * Shows progress, results, coverage, and any errors
+ * @returns {Promise<void>}
+ */
+export async function runCurrentTestClass() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage('No file is currently open.');
+    return;
+  }
+
+  const filePath = editor.document.uri.fsPath;
+  
+  if (!isApexFile(filePath)) {
+    vscode.window.showWarningMessage('This command only works with Apex classes and triggers.');
+    return;
+  }
+
+  const apexName = getApexName(filePath);
+  if (!apexName) {
+    vscode.window.showWarningMessage('Could not determine the Apex class name.');
+    return;
+  }
+
+  // Check if it's a test class
+  if (!isTestClass(apexName, filePath)) {
+    // Not a test class - offer to find and run tests for this class
+    const action = await vscode.window.showQuickPick([
+      { label: '$(search) Find Tests for This Class', description: 'Search for test classes that cover this class', value: 'find' },
+      { label: '$(play) Run All Tests', description: 'Run all tests in the org (slow)', value: 'all' },
+    ], {
+      placeHolder: `${apexName} is not a test class. What would you like to do?`,
+    });
+
+    if (action?.value === 'find') {
+      // Try to find test classes that might test this class
+      await findAndRunTestsForClass(apexName);
+    } else if (action?.value === 'all') {
+      vscode.window.showWarningMessage('Running all tests can take a long time. Use "sf apex run test" in terminal for more control.');
+    }
+    return;
+  }
+
+  // Save the file first
+  await editor.document.save();
+
+  // Run the test class
+  await runTestClass(apexName);
+}
+
+/**
+ * Find and run tests for a non-test class
+ * @param {string} className 
+ */
+async function findAndRunTestsForClass(className) {
+  // Common naming patterns for test classes
+  const possibleTestNames = [
+    `${className}Test`,
+    `${className}_Test`,
+    `Test${className}`,
+    `${className}Tests`,
+  ];
+
+  // Show a quick pick to select or enter test class name
+  const options = possibleTestNames.map(name => ({
+    label: `$(beaker) ${name}`,
+    description: 'Run this test class',
+    value: name,
+  }));
+  
+  options.push({
+    label: '$(edit) Enter Test Class Name',
+    description: 'Manually enter the test class name',
+    value: '__custom__',
+  });
+
+  const selected = await vscode.window.showQuickPick(options, {
+    placeHolder: `Select a test class to run for ${className}`,
+  });
+
+  if (!selected) return;
+
+  let testClassName = selected.value;
+  
+  if (testClassName === '__custom__') {
+    testClassName = await vscode.window.showInputBox({
+      prompt: 'Enter the test class name',
+      placeHolder: 'e.g., MyClassTest',
+    });
+    if (!testClassName) return;
+  }
+
+  await runTestClass(testClassName);
+}
+
+/**
+ * Run a specific test class and show results
+ * @param {string} testClassName 
+ */
+async function runTestClass(testClassName) {
+  // Create output channel for test results
+  const outputChannel = vscode.window.createOutputChannel('SF Apex Tests', 'log');
+  outputChannel.show(true);
+  outputChannel.clear();
+  
+  outputChannel.appendLine(`════════════════════════════════════════════════════════════════`);
+  outputChannel.appendLine(`  Running Apex Tests: ${testClassName}`);
+  outputChannel.appendLine(`  Started: ${new Date().toLocaleString()}`);
+  outputChannel.appendLine(`════════════════════════════════════════════════════════════════`);
+  outputChannel.appendLine('');
+  outputChannel.appendLine('⏳ Submitting test run to Salesforce org...');
+  outputChannel.appendLine('   This may take a few minutes depending on test complexity.');
+  outputChannel.appendLine('');
+
+  // Show progress notification
+  await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: `Running tests: ${testClassName}`,
+    cancellable: false,
+  }, async (progress) => {
+    progress.report({ message: 'Submitting test run...' });
+    
+    try {
+      // Run the test with JSON output for parsing
+      const result = await shell.execCommandWithTimeout(
+        `sf apex run test --class-names ${testClassName} --code-coverage --result-format json --wait 10`,
+        600000 // 10 minute timeout
+      );
+      
+      const testResult = JSON.parse(result);
+      
+      progress.report({ message: 'Processing results...' });
+      
+      // Display results
+      displayTestResults(outputChannel, testResult, testClassName);
+      
+      // Clear coverage cache to get fresh data
+      clearCache();
+      
+      // Refresh coverage display for current file
+      const editor = vscode.window.activeTextEditor;
+      if (editor) {
+        await updateCoverageDisplay(editor);
+      }
+      
+    } catch (error) {
+      outputChannel.appendLine('');
+      outputChannel.appendLine(`❌ ERROR: ${error.message}`);
+      outputChannel.appendLine('');
+      
+      // Try to parse error output if it's JSON
+      try {
+        const errorData = JSON.parse(error.message);
+        if (errorData.result) {
+          displayTestResults(outputChannel, errorData, testClassName);
+        }
+      } catch {
+        // Not JSON, show raw error
+        outputChannel.appendLine('Check that the test class exists and compiles successfully.');
+      }
+      
+      vscode.window.showErrorMessage(`Test run failed: ${error.message.substring(0, 100)}...`);
+    }
+  });
+}
+
+/**
+ * Display test results in the output channel
+ * @param {vscode.OutputChannel} outputChannel 
+ * @param {Object} testResult 
+ * @param {string} testClassName 
+ */
+function displayTestResults(outputChannel, testResult, testClassName) {
+  const summary = testResult.result?.summary || testResult.summary || {};
+  const tests = testResult.result?.tests || testResult.tests || [];
+  const coverage = testResult.result?.coverage?.coverage || testResult.coverage?.coverage || [];
+  
+  // Summary section
+  outputChannel.appendLine('📊 TEST SUMMARY');
+  outputChannel.appendLine('────────────────────────────────────────────────────────────────');
+  outputChannel.appendLine(`  Outcome:     ${summary.outcome || 'Unknown'}`);
+  outputChannel.appendLine(`  Tests Run:   ${summary.testsRan || tests.length || 0}`);
+  outputChannel.appendLine(`  Passing:     ${summary.passing || 0}`);
+  outputChannel.appendLine(`  Failing:     ${summary.failing || 0}`);
+  outputChannel.appendLine(`  Skipped:     ${summary.skipped || 0}`);
+  outputChannel.appendLine(`  Duration:    ${summary.testRunTime || summary.testTotalTime || 'N/A'}`);
+  outputChannel.appendLine('');
+
+  // Individual test results
+  if (tests.length > 0) {
+    outputChannel.appendLine('📝 TEST METHODS');
+    outputChannel.appendLine('────────────────────────────────────────────────────────────────');
+    
+    tests.forEach(test => {
+      const status = test.Outcome || test.outcome;
+      const icon = status === 'Pass' ? '✅' : status === 'Fail' ? '❌' : '⏭️';
+      const methodName = test.MethodName || test.methodName || 'Unknown';
+      const duration = test.RunTime || test.runTime || 0;
+      
+      outputChannel.appendLine(`  ${icon} ${methodName} (${duration}ms)`);
+      
+      // Show error details for failed tests
+      if (status === 'Fail') {
+        const message = test.Message || test.message || '';
+        const stackTrace = test.StackTrace || test.stackTrace || '';
+        
+        if (message) {
+          outputChannel.appendLine(`     ├─ Message: ${message}`);
+        }
+        if (stackTrace) {
+          outputChannel.appendLine(`     └─ Stack Trace:`);
+          stackTrace.split('\n').forEach(line => {
+            outputChannel.appendLine(`        ${line}`);
+          });
+        }
+        outputChannel.appendLine('');
+      }
+    });
+    outputChannel.appendLine('');
+  }
+
+  // Coverage section
+  if (coverage.length > 0) {
+    outputChannel.appendLine('🧪 CODE COVERAGE');
+    outputChannel.appendLine('────────────────────────────────────────────────────────────────');
+    
+    // Sort by coverage percentage (ascending, so lowest coverage is first)
+    const sortedCoverage = [...coverage].sort((a, b) => {
+      const aPercent = parseFloat(a.coveredPercent || a.percentage || 0);
+      const bPercent = parseFloat(b.coveredPercent || b.percentage || 0);
+      return aPercent - bPercent;
+    });
+    
+    sortedCoverage.forEach(cov => {
+      const name = cov.name || cov.apexClassOrTriggerName || 'Unknown';
+      const percent = parseFloat(cov.coveredPercent || cov.percentage || 0);
+      const covered = cov.numLinesCovered || 0;
+      const uncovered = cov.numLinesUncovered || 0;
+      
+      let icon = '🔴';
+      if (percent >= 75) icon = '🟢';
+      else if (percent >= 50) icon = '🟡';
+      
+      outputChannel.appendLine(`  ${icon} ${name}: ${percent}% (${covered}/${covered + uncovered} lines)`);
+    });
+    outputChannel.appendLine('');
+    
+    // Overall coverage
+    const orgCoverage = summary.testRunCoverage || summary.orgWideCoverage;
+    if (orgCoverage) {
+      outputChannel.appendLine(`  📈 Org-wide Coverage: ${orgCoverage}`);
+      outputChannel.appendLine('');
+    }
+  }
+
+  // Final status
+  outputChannel.appendLine('════════════════════════════════════════════════════════════════');
+  const outcome = summary.outcome || 'Unknown';
+  if (outcome === 'Passed') {
+    outputChannel.appendLine('  ✅ ALL TESTS PASSED');
+    vscode.window.showInformationMessage(`✅ All tests passed in ${testClassName}`);
+  } else if (summary.failing > 0) {
+    outputChannel.appendLine(`  ❌ ${summary.failing} TEST(S) FAILED`);
+    vscode.window.showErrorMessage(`❌ ${summary.failing} test(s) failed in ${testClassName}. See output for details.`);
+  } else {
+    outputChannel.appendLine(`  ⚠️ Test run completed with status: ${outcome}`);
+  }
+  outputChannel.appendLine(`  Finished: ${new Date().toLocaleString()}`);
+  outputChannel.appendLine('════════════════════════════════════════════════════════════════');
+}
+
+/**
  * Dispose resources
  */
 export function dispose() {

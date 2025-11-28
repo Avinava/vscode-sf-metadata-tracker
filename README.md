@@ -32,11 +32,14 @@ Track and display sync status indicators for Salesforce metadata files in VS Cod
 - Background metadata scanning with progress indicator
 - Manual refresh options for on-demand status updates
 
-### 🧪 Code Coverage
+### 🧪 Code Coverage & Testing
 - View code coverage percentage for Apex classes and triggers
 - Toggle coverage highlighting directly in the editor
 - Visual indicators for covered/uncovered lines
-- Refresh coverage data on demand
+- **Run Apex tests** directly from VS Code with progress indicator
+- View detailed test results, failures, and stack traces
+- Automatic coverage refresh after test runs
+- Context menu integration for quick test execution
 
 ### ☁️ Deploy & Retrieve
 - Deploy current file to org directly from VS Code
@@ -101,6 +104,7 @@ Access these commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 | `SF Metadata Tracker: Switch Default Org` | Switch to a different connected org |
 | `SF Metadata Tracker: Toggle Code Coverage Highlighting` | Show/hide coverage highlighting for Apex files |
 | `SF Metadata Tracker: Refresh Code Coverage` | Refresh coverage data from org |
+| `SF Metadata Tracker: Run Apex Tests` | Run tests for the current Apex class |
 
 ## Extension Settings
 
@@ -177,8 +181,12 @@ yarn package
 ## Changelog
 
 ### v1.4.0
+- Added **Run Apex Tests** command with detailed results output
+- View test results, failures, stack traces, and coverage in output panel
+- Context menu integration for quick test execution
 - Added relative time display in tooltips and status popup (e.g., "2 hours ago")
 - Added custom Salesforce-themed status bar icon
+- Added loading indicators when fetching code coverage
 - Improved status bar quick pick with detailed information
 - Bug fixes and performance improvements
 
