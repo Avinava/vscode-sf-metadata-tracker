@@ -1,179 +1,206 @@
-# SF Metadata Tracker
-
-[![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue?logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.9.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
-
-Track and display sync status indicators for Salesforce metadata files in VS Code. Get real-time visibility into your metadata's org status, including who last modified it, when, and code coverage metrics.
-
 <p align="center">
   <img src="assets/icon.png" alt="SF Metadata Tracker" width="128" height="128">
 </p>
 
-## Screenshot
+<h1 align="center">SF Metadata Tracker</h1>
 
 <p align="center">
-  <img src="screenshots/screenshot.png" alt="SF Metadata Tracker Screenshot" width="800">
+  <strong>Real-time Salesforce metadata sync status and code coverage for VS Code</strong>
 </p>
+
+<p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker">
+    <img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace">
+  </a>
+  <img src="https://img.shields.io/badge/version-1.9.0-brightgreen" alt="Version">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT">
+  </a>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#commands">Commands</a> •
+  <a href="#configuration">Configuration</a>
+</p>
+
+---
+
+## Overview
+
+SF Metadata Tracker provides real-time visibility into your Salesforce metadata sync status. Know instantly whether your local files match the org, who last modified them, and get comprehensive code coverage insights—all without leaving your editor.
+
+<p align="center">
+  <img src="screenshots/screenshot.png" alt="SF Metadata Tracker in action" width="900">
+</p>
+
+---
 
 ## Features
 
-### 📊 Status Bar Integration
-- View the sync status of the currently active Salesforce metadata file
-- See who last modified the file in the org with **relative time** (e.g., "2 hours ago")
-- Quick access to detailed file information with deploy/retrieve actions
-- Custom Salesforce-themed status bar icon
+### 🔄 Metadata Sync Status
 
-### 🎨 File Decorations
-- Visual indicators in the Explorer view showing metadata status
-- Quickly identify files that differ from the org version
-- Color-coded badges for easy recognition:
-  - 🟢 **In Sync** - Local file matches org
-  - 🟡 **Modified** - Local changes detected
-  - 🔵 **New** - File doesn't exist in org yet
-
-### 🔄 Real-time Tracking
-- Automatic detection of Salesforce DX projects
-- Smart caching to minimize API calls
-- Background metadata scanning with progress indicator
-- Manual refresh options for on-demand status updates
+| Feature | Description |
+|---------|-------------|
+| **Status Bar** | View sync status with last modified info |
+| **File Decorations** | Color-coded badges: 🟢 In Sync · 🟡 Modified · 🔵 New |
+| **Smart Caching** | Intelligent caching to minimize API calls |
+| **Background Scanning** | Automatic metadata scanning with progress indicator |
 
 ### 🧪 Code Coverage & Testing
-- **Code Coverage Panel** in Explorer sidebar showing coverage for all classes
-- **Export coverage** to CSV or JSON for reporting and analysis
-- **Run All Local Tests** with real-time progress tracking
-- View org-wide coverage summary with color-coded status
-- Click on any class to open file and show coverage highlighting
-- View code coverage percentage for Apex classes and triggers
-- Toggle coverage highlighting directly in the editor
-- Visual indicators for covered/uncovered lines
-- **Run Apex tests** directly from VS Code with progress indicator
-- View detailed test results, failures, and stack traces
-- Automatic coverage refresh after test runs
-- Context menu integration for quick test execution
+
+| Feature | Description |
+|---------|-------------|
+| **Coverage Panel** | Sidebar panel showing coverage for all Apex classes |
+| **Run All Tests** | Execute all local tests with real-time progress |
+| **Run Single Test** | Run tests for current file with detailed results |
+| **Coverage Highlighting** | Visual line-by-line coverage in editor |
+| **Export** | Export coverage to CSV or JSON |
 
 ### ☁️ Deploy & Retrieve
-- Deploy current file to org directly from VS Code
-- Retrieve latest version from org
-- Context menu integration in Explorer and Editor
-- Quick actions from status bar popup
 
-### 🔐 Org Management
-- Authorize new orgs without leaving VS Code
-- Switch between connected orgs easily
-- Clear authentication status indicators
+| Feature | Description |
+|---------|-------------|
+| **Quick Deploy** | Deploy current file directly from VS Code |
+| **Quick Retrieve** | Retrieve latest version from org |
+| **Context Menus** | Right-click integration in Explorer and Editor |
+| **Org Management** | Authorize and switch between orgs |
 
-## Supported Metadata Types
+---
 
-- **Apex Classes** (`.cls`)
-- **Apex Triggers** (`.trigger`)
-- **Lightning Web Components** (LWC)
-- **Aura Components**
-- **Visualforce Pages** (`.page`)
-- **Visualforce Components** (`.component`)
-- **Flows** (`.flow-meta.xml`)
+## Supported Metadata
 
-## Requirements
+| Type | Extensions |
+|------|------------|
+| Apex Classes | `.cls` |
+| Apex Triggers | `.trigger` |
+| Lightning Web Components | `.js`, `.html`, `.css` |
+| Aura Components | `.cmp`, `.app`, `.evt` |
+| Visualforce Pages | `.page` |
+| Visualforce Components | `.component` |
+| Flows | `.flow-meta.xml` |
 
-- **Visual Studio Code** v1.61.0 or higher
-- **Salesforce CLI (sf)** installed and available in PATH
-- A **Salesforce DX project** with `sfdx-project.json`
-- An authenticated default org connection
+---
 
 ## Installation
 
+### From VS Code Marketplace
+
 1. Open VS Code
-2. Go to Extensions (`Cmd+Shift+X` on macOS, `Ctrl+Shift+X` on Windows/Linux)
-3. Search for "SF Metadata Tracker"
+2. Press `Cmd+Shift+X` (macOS) or `Ctrl+Shift+X` (Windows/Linux)
+3. Search for **"SF Metadata Tracker"**
 4. Click **Install**
 
-Or install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker).
+**[→ Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker)**
+
+### Prerequisites
+
+- VS Code **v1.61.0+**
+- Salesforce CLI (`sf`) installed and in PATH
+- Salesforce DX project with `sfdx-project.json`
+- Authenticated org connection
+
+---
 
 ## Usage
 
-### Automatic Activation
-The extension automatically activates when you open a workspace containing an `sfdx-project.json` file.
+### Quick Start
+
+1. Open a Salesforce DX project in VS Code
+2. Extension activates automatically when `sfdx-project.json` is detected
+3. View sync status in status bar and file explorer
+4. Click status bar item for detailed info and quick actions
 
 ### Status Bar
-Click on the status bar item to see detailed information about the current file:
+
+Click the status bar to view:
 - Last modified by (with relative time)
-- Created by (with relative time)
+- Created by (with relative time)  
 - Connected org information
 - Quick actions: Deploy, Retrieve, Refresh
 
-### Commands
-Access these commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+### Code Coverage Panel
+
+Find **SF Code Coverage** in the Explorer sidebar:
+- View org-wide coverage summary
+- Click any class to open with coverage highlighting
+- Use toolbar to run tests, export, or refresh
+
+---
+
+## Commands
+
+Access via Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 
 | Command | Description |
 |---------|-------------|
-| `SF Metadata Tracker: Show File Org Status` | Display detailed org status for the current file |
-| `SF Metadata Tracker: Refresh File Status` | Refresh the status of the current file |
-| `SF Metadata Tracker: Refresh All File Status` | Clear cache and refresh all file statuses |
-| `SF Metadata Tracker: Deploy Current File to Org` | Deploy the current file to the connected org |
-| `SF Metadata Tracker: Retrieve Current File from Org` | Retrieve the latest version from org |
-| `SF Metadata Tracker: Authorize Org` | Authorize a new Salesforce org |
-| `SF Metadata Tracker: Switch Default Org` | Switch to a different connected org |
-| `SF Metadata Tracker: Toggle Code Coverage Highlighting` | Show/hide coverage highlighting for Apex files |
-| `SF Metadata Tracker: Refresh Code Coverage` | Refresh coverage data from org |
-| `SF Metadata Tracker: Run Apex Tests` | Run tests for the current Apex class |
-| `SF Metadata Tracker: Run All Local Tests` | Run all local tests with progress tracking |
-| `SF Metadata Tracker: Refresh Coverage Panel` | Refresh the code coverage panel |
-| `SF Metadata Tracker: Export Code Coverage` | Export coverage data to CSV or JSON |
+| **Show File Org Status** | Display detailed org status |
+| **Refresh File Status** | Refresh current file status |
+| **Refresh All File Status** | Clear cache and refresh all |
+| **Deploy Current File** | Deploy to connected org |
+| **Retrieve Current File** | Retrieve from org |
+| **Authorize Org** | Authorize a new org |
+| **Switch Default Org** | Switch to different org |
+| **Toggle Coverage Highlighting** | Show/hide coverage in editor |
+| **Refresh Code Coverage** | Refresh coverage data |
+| **Run Apex Tests** | Run tests for current class |
+| **Run All Local Tests** | Run all tests with progress |
+| **Export Code Coverage** | Export to CSV or JSON |
 
-## Extension Settings
+---
 
-Configure the extension in VS Code settings (`Cmd+,` / `Ctrl+,`):
+## Configuration
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `sfMetadataTracker.showStatusBar` | boolean | `true` | Show file sync status in the status bar |
-| `sfMetadataTracker.showFileDecorations` | boolean | `true` | Show sync status decorations on files in explorer |
-| `sfMetadataTracker.cacheTTL` | number | `60` | Cache time-to-live in seconds for file status |
-| `sfMetadataTracker.showScanSummary` | boolean | `true` | Show a brief summary in status bar after scanning files |
-| `sfMetadataTracker.showCoverageStatus` | boolean | `true` | Show code coverage percentage in status bar for Apex files |
+Configure in VS Code Settings (`Cmd+,` / `Ctrl+,`):
 
-## How It Works
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `sfMetadataTracker.showStatusBar` | `true` | Show sync status in status bar |
+| `sfMetadataTracker.showFileDecorations` | `true` | Show decorations in Explorer |
+| `sfMetadataTracker.cacheTTL` | `60` | Cache TTL in seconds |
+| `sfMetadataTracker.showScanSummary` | `true` | Show summary after scanning |
+| `sfMetadataTracker.showCoverageStatus` | `true` | Show coverage in status bar |
 
-1. **Org Connection Check**: The extension verifies your default Salesforce org connection
-2. **Metadata Detection**: When you open a supported metadata file, it identifies the metadata type
-3. **Status Query**: It queries the org for the component's last modified information
-4. **Comparison**: Compares local file content with org version to detect changes
-5. **Visual Display**: Shows the status in the status bar and file explorer decorations
-6. **Code Coverage**: Fetches and displays coverage data for Apex files
+---
 
 ## Troubleshooting
 
-### Extension Not Activating
-- Ensure your workspace contains an `sfdx-project.json` file
-- Verify that Salesforce CLI is installed: run `sf --version` in terminal
+<details>
+<summary><strong>Extension not activating</strong></summary>
 
-### "No Org" or "Auth Expired" Error
-- Check your default org: `sf org display`
-- Authenticate to an org: `sf org login web`
-- Set a default org: `sf config set target-org <alias>`
-- Use the "Authorize Org" command from the extension
+- Ensure workspace contains `sfdx-project.json`
+- Verify Salesforce CLI: `sf --version`
+</details>
 
-### Status Not Updating
-- Use "Refresh File Status" command to force an update
-- Use "Refresh All File Status" to clear all caches
-- Check the cache TTL setting if status seems stale
+<details>
+<summary><strong>"No Org" or "Auth Expired" error</strong></summary>
 
-### Code Coverage Not Showing
-- Ensure you have run tests in the org
-- Use "Refresh Code Coverage" to fetch latest data
-- Coverage only works for Apex classes and triggers
+- Check default org: `sf org display`
+- Authenticate: `sf org login web`
+- Set default: `sf config set target-org <alias>`
+</details>
+
+<details>
+<summary><strong>Status not updating</strong></summary>
+
+- Use "Refresh File Status" command
+- Use "Refresh All File Status" to clear caches
+</details>
+
+<details>
+<summary><strong>Code coverage not showing</strong></summary>
+
+- Run tests in the org first
+- Use "Refresh Code Coverage"
+</details>
+
+---
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Development
 
 ```bash
 # Clone the repository
@@ -185,28 +212,34 @@ yarn install
 # Run linting
 yarn lint
 
-# Build the extension
+# Build
 yarn build
-
-# Package for release
-yarn package
 ```
+
+---
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes in each version.
+See **[CHANGELOG.md](CHANGELOG.md)** for version history.
 
-### Recent Highlights (v1.9.0)
-- **Run All Local Tests** - Run all tests with real-time progress tracking
-- **Export Code Coverage** - Export coverage data to CSV or JSON for reporting
-- **SF Code Coverage Panel** - Sidebar panel showing coverage for all Apex classes
-- Click on any class to open file and show coverage highlighting
+**Latest in v1.9.0:**
+- Run All Local Tests with real-time progress
+- Export coverage to CSV/JSON
+- Interactive Code Coverage Panel
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+---
 
-- Built for the Salesforce developer community
-- Powered by VS Code Extension API and Salesforce CLI
+<p align="center">
+  Built with ❤️ for the Salesforce developer community
+</p>
+
+<p align="center">
+  <a href="https://github.com/Avinava/vscode-sf-metadata-tracker/issues">Report Bug</a> •
+  <a href="https://github.com/Avinava/vscode-sf-metadata-tracker/issues">Request Feature</a>
+</p>
