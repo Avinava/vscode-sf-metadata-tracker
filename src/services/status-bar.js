@@ -352,11 +352,6 @@ export async function showFileOrgStatusDetails() {
       description: 'Clear cache and recheck',
       action: 'refresh',
     },
-    {
-      label: '$(globe) Open Org in Browser',
-      description: 'Open the Salesforce org',
-      action: 'open',
-    },
   ];
 
   const selected = await vscode.window.showQuickPick(items, {
@@ -370,10 +365,6 @@ export async function showFileOrgStatusDetails() {
     await refreshAll(true);
     await updateSyncStatus(filePath);
     vscode.window.showInformationMessage('Status refreshed!');
-  } else if (selected?.action === 'open') {
-    const terminal = vscode.window.createTerminal('SF Open');
-    terminal.show();
-    terminal.sendText('sf org open');
   } else if (selected?.action === 'deploy') {
     vscode.commands.executeCommand('sf-metadata-tracker.deployCurrentFile');
   } else if (selected?.action === 'retrieve') {
