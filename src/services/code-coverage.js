@@ -872,8 +872,8 @@ export async function runAllLocalTests() {
         pollCount++;
         
         try {
-          // Query test run status
-          const statusQuery = `SELECT Id, Status, JobItemsProcessed, TotalJobItems, NumberOfErrors FROM ApexTestRunResult WHERE AsyncApexJobId = '${testRunId}' LIMIT 1`;
+          // Query test run status using correct ApexTestRunResult fields
+          const statusQuery = `SELECT Id, Status, MethodsCompleted, MethodsEnqueued, MethodsFailed FROM ApexTestRunResult WHERE AsyncApexJobId = '${testRunId}' LIMIT 1`;
           const statusResult = await shell.execCommandWithTimeout(
             `sf data query --query "${statusQuery}" --use-tooling-api --json`,
             30000
@@ -884,9 +884,9 @@ export async function runAllLocalTests() {
           
           if (record) {
             const status = record.Status;
-            const processed = record.JobItemsProcessed || 0;
-            const total = record.TotalJobItems || 0;
-            const errors = record.NumberOfErrors || 0;
+            const processed = record.MethodsCompleted || 0;
+            const total = record.MethodsEnqueued || 0;
+            const errors = record.MethodsFailed || 0;
             const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
             const elapsed = Math.round((Date.now() - startTime) / 1000);
             const elapsedStr = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`;
