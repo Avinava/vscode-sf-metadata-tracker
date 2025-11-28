@@ -447,6 +447,13 @@ export function initialize(context) {
     })
   );
   
+  // Register export coverage command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('sf-metadata-tracker.exportCoverage', async () => {
+      await exportCoverage();
+    })
+  );
+  
   // Auto-load coverage data after a short delay (allow org connection to establish)
   setTimeout(async () => {
     await fetchAllCoverage();
@@ -460,6 +467,135 @@ export function initialize(context) {
  */
 export async function refresh() {
   await fetchAllCoverage();
+}
+
+/**
+ * Export coverage data to CSV file
+ */
+export async function exportCoverage() {
+  if (coverageData.size === 0) {
+    vscode.window.showWarningMessage('No coverage data to export. Please refresh the coverage panel first.');
+    return;
+  }
+
+  // Ask user for export format
+  const format = await vscode.window.showQuickPick([
+    { label: '$(file) CSV', description: 'Comma-separated values file', value: 'csv' },
+    { label: '$(json) JSON', description: 'JSON format', value: 'json' },
+  ], {
+    placeHolder: 'Select export format',
+  });
+
+  if (!format) return;
+
+  // Prepare data
+  const classes = [];
+  const triggers = [];
+  
+  coverageData.forEach((data) => {
+    if (data.type === 'ApexClass') {
+      classes.push(data);
+    } else if (data.type === 'ApexTrigger') {
+      triggers.push(data);
+    }
+  });
+
+  const allItems = [...classes, ...triggers];
+  allItems.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Calculate summary
+  const totalCovered = allItems.reduce((sum, item) => sum + item.covered, 0);
+  const totalUncovered = allItems.reduce((sum, item) => sum + item.uncovered, 0);
+  const totalLines = totalCovered + totalUncovered;
+  const orgCoverage = totalLines > 0 ? Math.round((totalCovered / totalLines) * 100) : 0;
+
+  let content = '';
+  let defaultFileName = '';
+  const timestamp = new Date().toISOString().split('T')[0];
+
+  if (format.value === 'csv') {
+    // Generate CSV content
+    const lines = [
+      'Name,Type,Coverage %,Lines Covered,Lines Uncovered,Total Lines,Status',
+    ];
+
+    for (const item of allItems) {
+      const status = item.percentage >= 75 ? 'Good' : item.percentage >= 50 ? 'Warning' : 'Critical';
+      const total = item.covered + item.uncovered;
+      lines.push(`"${item.name}","${item.type}",${item.percentage},${item.covered},${item.uncovered},${total},"${status}"`);
+    }
+
+    // Add summary rows
+    lines.push('');
+    lines.push(`"TOTAL","",${orgCoverage},${totalCovered},${totalUncovered},${totalLines},""`);
+    lines.push(`"Classes Count","",${classes.length},,,,`);
+    lines.push(`"Triggers Count","",${triggers.length},,,,`);
+    lines.push(`"Export Date","","${new Date().toLocaleString()}",,,,`);
+
+    content = lines.join('\n');
+    defaultFileName = `code-coverage-${timestamp}.csv`;
+  } else {
+    // Generate JSON content
+    const jsonData = {
+      exportDate: new Date().toISOString(),
+      summary: {
+        orgCoverage: orgCoverage,
+        totalCovered: totalCovered,
+        totalUncovered: totalUncovered,
+        totalLines: totalLines,
+        classesCount: classes.length,
+        triggersCount: triggers.length,
+        criticalCount: allItems.filter(i => i.percentage < 50).length,
+        warningCount: allItems.filter(i => i.percentage >= 50 && i.percentage < 75).length,
+        goodCount: allItems.filter(i => i.percentage >= 75).length,
+      },
+      coverage: allItems.map(item => ({
+        name: item.name,
+        type: item.type,
+        percentage: item.percentage,
+        linesCovered: item.covered,
+        linesUncovered: item.uncovered,
+        totalLines: item.covered + item.uncovered,
+        status: item.percentage >= 75 ? 'Good' : item.percentage >= 50 ? 'Warning' : 'Critical',
+      })),
+    };
+
+    content = JSON.stringify(jsonData, null, 2);
+    defaultFileName = `code-coverage-${timestamp}.json`;
+  }
+
+  // Ask where to save
+  const uri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+      defaultFileName
+    )),
+    filters: format.value === 'csv' 
+      ? { 'CSV Files': ['csv'], 'All Files': ['*'] }
+      : { 'JSON Files': ['json'], 'All Files': ['*'] },
+    title: 'Export Code Coverage',
+  });
+
+  if (!uri) return;
+
+  try {
+    fs.writeFileSync(uri.fsPath, content, 'utf8');
+    
+    const openFile = await vscode.window.showInformationMessage(
+      `Coverage data exported to ${path.basename(uri.fsPath)}`,
+      'Open File',
+      'Open Folder'
+    );
+
+    if (openFile === 'Open File') {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc);
+    } else if (openFile === 'Open Folder') {
+      await vscode.commands.executeCommand('revealFileInOS', uri);
+    }
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to export coverage: ${error.message}`);
+  }
 }
 
 /**

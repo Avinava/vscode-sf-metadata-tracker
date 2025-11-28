@@ -2,7 +2,7 @@
 
 [![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-blue?logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=avidev9.sf-metadata-tracker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.7.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
+[![Version](https://img.shields.io/badge/version-1.8.0-green.svg)](https://github.com/Avinava/vscode-sf-metadata-tracker/releases)
 
 Track and display sync status indicators for Salesforce metadata files in VS Code. Get real-time visibility into your metadata's org status, including who last modified it, when, and code coverage metrics.
 
@@ -34,6 +34,7 @@ Track and display sync status indicators for Salesforce metadata files in VS Cod
 
 ### 🧪 Code Coverage & Testing
 - **Code Coverage Panel** in Explorer sidebar showing coverage for all classes
+- **Export coverage** to CSV or JSON for reporting and analysis
 - View org-wide coverage summary with color-coded status
 - Click on any class to open file and show coverage highlighting
 - View code coverage percentage for Apex classes and triggers
@@ -109,6 +110,7 @@ Access these commands via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
 | `SF Metadata Tracker: Refresh Code Coverage` | Refresh coverage data from org |
 | `SF Metadata Tracker: Run Apex Tests` | Run tests for the current Apex class |
 | `SF Metadata Tracker: Refresh Coverage Panel` | Refresh the code coverage panel |
+| `SF Metadata Tracker: Export Code Coverage` | Export coverage data to CSV or JSON |
 
 ## Extension Settings
 
@@ -186,8 +188,9 @@ yarn package
 
 See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes in each version.
 
-### Recent Highlights (v1.7.0)
-- **SF Code Coverage Panel** - New sidebar panel showing coverage for all Apex classes
+### Recent Highlights (v1.8.0)
+- **Export Code Coverage** - Export coverage data to CSV or JSON for reporting
+- **SF Code Coverage Panel** - Sidebar panel showing coverage for all Apex classes
 - Click on any class to open file and show coverage highlighting
 - Auto-refresh coverage after running tests
 

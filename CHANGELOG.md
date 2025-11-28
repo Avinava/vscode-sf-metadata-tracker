@@ -5,6 +5,17 @@ All notable changes to the SF Metadata Tracker extension will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2025-11-28
+
+### Added
+
+- **Export Code Coverage** - Export coverage data to CSV or JSON format
+  - Export button in the coverage panel title bar
+  - Choose between CSV (spreadsheet-friendly) or JSON (programmatic) formats
+  - Includes summary statistics (org coverage, class counts, status breakdown)
+  - Option to open exported file or reveal in file explorer
+  - Available via command palette: "SF Metadata Tracker: Export Code Coverage"
+
 ## [1.7.0] - 2025-11-28
 
 ### Added

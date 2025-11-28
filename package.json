@@ -2,7 +2,7 @@
   "name": "sf-metadata-tracker",
   "displayName": "SF Metadata Tracker",
   "description": "Track and display sync status indicators for Salesforce metadata files in VS Code",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "publisher": "avidev9",
   "type": "module",
   "scripts": {
@@ -165,19 +165,34 @@
         "title": "SF Metadata Tracker: Refresh Coverage Panel",
         "shortTitle": "Refresh Panel",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sf-metadata-tracker.exportCoverage",
+        "title": "SF Metadata Tracker: Export Code Coverage",
+        "shortTitle": "Export Coverage",
+        "icon": "$(export)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "sf-metadata-tracker.exportCoverage",
+          "when": "view == sfCoveragePanel",
+          "group": "navigation@1"
+        },
+        {
           "command": "sf-metadata-tracker.refreshCoveragePanel",
           "when": "view == sfCoveragePanel",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [
         {
           "command": "sf-metadata-tracker.refreshCoveragePanel",
+          "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
+        },
+        {
+          "command": "sf-metadata-tracker.exportCoverage",
           "when": "sfMetadataTracker:project_opened && sfMetadataTracker:cli_installed"
         },
         {
