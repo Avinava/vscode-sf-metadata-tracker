@@ -454,13 +454,20 @@ export function initialize(context) {
 
   logger.log('File decoration provider initialized');
 
-  // Start background prefetch after a short delay
-  // This allows VS Code to finish loading before we start querying
-  setTimeout(() => {
-    prefetchAllSalesforceFiles().catch((error) => {
-      logger.log(`Prefetch error: ${error.message}`, 'WARN');
-    });
-  }, 3000);
+  // Only auto-scan on startup if the user opted in.
+  // When disabled, metadata status is fetched lazily per-file on open.
+  const autoScan = vscode.workspace.getConfiguration('sfMetadataTracker')
+    .get('autoScanOnStartup', false);
+
+  if (autoScan) {
+    setTimeout(() => {
+      prefetchAllSalesforceFiles().catch((error) => {
+        logger.log(`Prefetch error: ${error.message}`, 'WARN');
+      });
+    }, 3000);
+  } else {
+    logger.log('Auto-scan disabled — metadata status will be fetched on demand');
+  }
 
   return decorationProvider;
 }

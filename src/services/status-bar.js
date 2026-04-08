@@ -83,7 +83,7 @@ export async function updateSyncStatus(filePath) {
     return;
   }
 
-  // Check if it's a Salesforce metadata file
+  // Short-circuit immediately for non-Salesforce files — no async work needed
   if (!isSalesforceFile(filePath)) {
     hideSyncStatus();
     return;
@@ -96,8 +96,12 @@ export async function updateSyncStatus(filePath) {
   syncStatusBarItem.color = undefined;
   syncStatusBarItem.show();
 
-  // First check if org is connected
-  const orgStatus = await sourceTracking.checkOrgConnection();
+  // Try cached org connection first for instant feedback
+  let orgStatus = sourceTracking.getCachedOrgConnection();
+  if (!orgStatus.connected) {
+    // Only hit the network if cache says disconnected or is empty
+    orgStatus = await sourceTracking.checkOrgConnection();
+  }
 
   if (!orgStatus.connected) {
     // Show appropriate status based on error type

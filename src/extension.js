@@ -62,7 +62,7 @@ class Extension {
 
       if (!this.cliInstalled) {
         console.log(`${EXTENSION_NAME}: Salesforce CLI not found`);
-        sfCli.promptInstallCli();
+        sfCli.promptInstallCli(this.context.globalState);
         return;
       }
 
@@ -136,7 +136,7 @@ class Extension {
       await vscode.commands.executeCommand('setContext', 'sfMetadataTracker:cli_installed', this.cliInstalled);
 
       if (!this.cliInstalled) {
-        sfCli.promptInstallCli();
+        sfCli.promptInstallCli(this.context.globalState);
         return;
       }
 
@@ -145,9 +145,7 @@ class Extension {
       fileDecorations.initialize(this.context);
       codeCoverage.initialize(this.context);
       coveragePanel.initialize(this.context);
-      vscode.window.showInformationMessage(
-        `${EXTENSION_NAME}: Salesforce DX project detected! Features activated.`
-      );
+      console.log(`${EXTENSION_NAME}: Salesforce DX project detected — features activated.`);
     } else {
       // Hide/dispose features when leaving SFDX project
       statusBarService.dispose();
